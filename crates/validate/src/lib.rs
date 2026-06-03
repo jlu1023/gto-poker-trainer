@@ -12,8 +12,11 @@
 //! Phase 0 implements the strategy-normalization invariant in full and the exploitability check
 //! from solution metadata; the zero-sum and external cross-check are stubbed.
 
+use anyhow::{anyhow, bail, Result};
 use gto_config::Config;
-use gto_engine::{NodeStrategy, SpotSolution};
+use gto_engine::{NodeStrategy, Spot, SpotSolution};
+use rs_poker::core::{Card, Hand, Rankable, Suit, Value};
+use rs_poker::holdem::RangeParser;
 
 /// Outcome of the internal-invariant checks.
 #[derive(Debug, Clone, Default)]
@@ -85,11 +88,156 @@ pub fn strategy_normalized(node: &NodeStrategy) -> (bool, f32) {
     (max_err <= 1e-3, max_err)
 }
 
-/// Independent equity cross-check via `rs_poker`. Stub for Phase 0.
+/// Result of comparing the solver's reported hero equity against an independent rs_poker enumeration.
+#[derive(Debug, Clone)]
+pub struct EquityCrossCheck {
+    pub hero_hand: String,
+    pub hero_player: usize,
+    pub solver_equity: f32,
+    pub enumerated_equity: f32,
+    pub abs_diff: f32,
+    pub villain_combos: usize,
+}
+
+impl EquityCrossCheck {
+    pub fn agrees(&self, tolerance: f32) -> bool {
+        self.abs_diff <= tolerance
+    }
+}
+
+/// Independent equity cross-check via `rs_poker` (no `arena` feature). Recomputes the root equity of
+/// one hero hand vs the opponent's range by EXHAUSTIVE turn+river enumeration (deterministic, no RNG)
+/// and compares it to the solver's reported `root.equity[hero_index]`. Flop spots only.
 ///
-/// Phase 1 will recompute each node's equity from the ranges with `rs_poker` and compare against
-/// the solver's reported equity, and optionally diff action frequencies against an opensolver
-/// (UPI) reference solve on rainbow flops.
-pub fn cross_check_equity(_solution: &SpotSolution) -> anyhow::Result<()> {
-    Ok(())
+/// This is a genuine independent check: rs_poker is used solely for card representation and 7-card
+/// hand ranking, with the enumeration and equity tally written here.
+pub fn cross_check_equity(solution: &SpotSolution, hero_index: usize) -> Result<EquityCrossCheck> {
+    let node = &solution.root;
+    let hero_label = node
+        .hands
+        .get(hero_index)
+        .ok_or_else(|| anyhow!("hero_index {hero_index} out of range ({} hands)", node.hands.len()))?;
+    let solver_equity = *node
+        .equity
+        .get(hero_index)
+        .ok_or_else(|| anyhow!("no solver equity for hero_index {hero_index}"))?;
+
+    let hero = parse_hole(hero_label)?;
+    let board = parse_board(&solution.spot)?;
+    if board.len() != 3 {
+        bail!("equity cross-check supports flop spots only (board has {} cards)", board.len());
+    }
+
+    // the opponent of the player to act at the root
+    let villain_range = if node.player == 0 {
+        &solution.spot.ip_range
+    } else {
+        &solution.spot.oop_range
+    };
+
+    let (enumerated_equity, villain_combos) = enumerate_equity(&hero, &board, villain_range)?;
+    Ok(EquityCrossCheck {
+        hero_hand: hero_label.clone(),
+        hero_player: node.player,
+        solver_equity,
+        enumerated_equity,
+        abs_diff: (solver_equity - enumerated_equity).abs(),
+        villain_combos,
+    })
+}
+
+/// Hero equity vs a villain range on a flop, by exhaustive turn+river enumeration with card removal.
+/// Returns (equity in 0..1, number of unblocked villain combos averaged over).
+fn enumerate_equity(hero: &[Card; 2], board: &[Card], villain_range: &str) -> Result<(f32, usize)> {
+    let villains = RangeParser::parse_many(villain_range)
+        .map_err(|e| anyhow!("parsing villain range '{villain_range}': {e:?}"))?;
+
+    let full_deck = all_cards();
+    let mut base_used: Vec<Card> = board.to_vec();
+    base_used.extend_from_slice(hero);
+
+    let mut sum_equity = 0.0f64;
+    let mut counted = 0usize;
+
+    for fh in &villains {
+        let v0 = fh[0];
+        let v1 = fh[1];
+        // skip villain combos blocked by the hero's cards or the board
+        if v0 == v1 || base_used.contains(&v0) || base_used.contains(&v1) {
+            continue;
+        }
+
+        let mut used = base_used.clone();
+        used.push(v0);
+        used.push(v1);
+        let remaining: Vec<Card> = full_deck.iter().copied().filter(|c| !used.contains(c)).collect();
+
+        let mut win = 0u32;
+        let mut tie = 0u32;
+        let mut total = 0u32;
+        for i in 0..remaining.len() {
+            for j in (i + 1)..remaining.len() {
+                let turn = remaining[i];
+                let river = remaining[j];
+                let hero_rank = Hand::new_with_cards(vec![
+                    hero[0], hero[1], board[0], board[1], board[2], turn, river,
+                ])
+                .rank();
+                let villain_rank = Hand::new_with_cards(vec![
+                    v0, v1, board[0], board[1], board[2], turn, river,
+                ])
+                .rank();
+                match hero_rank.cmp(&villain_rank) {
+                    std::cmp::Ordering::Greater => win += 1,
+                    std::cmp::Ordering::Equal => tie += 1,
+                    std::cmp::Ordering::Less => {}
+                }
+                total += 1;
+            }
+        }
+        if total > 0 {
+            sum_equity += (win as f64 + 0.5 * tie as f64) / total as f64;
+            counted += 1;
+        }
+    }
+
+    if counted == 0 {
+        bail!("no unblocked villain combos for range '{villain_range}'");
+    }
+    Ok(((sum_equity / counted as f64) as f32, counted))
+}
+
+fn parse_hole(label: &str) -> Result<[Card; 2]> {
+    if label.len() != 4 {
+        bail!("unexpected hole-card label '{label}'");
+    }
+    Ok([parse_card(&label[0..2])?, parse_card(&label[2..4])?])
+}
+
+fn parse_board(spot: &Spot) -> Result<Vec<Card>> {
+    let mut cards = Vec::new();
+    for s in &spot.board.flop {
+        cards.push(parse_card(s)?);
+    }
+    if let Some(t) = &spot.board.turn {
+        cards.push(parse_card(t)?);
+    }
+    if let Some(r) = &spot.board.river {
+        cards.push(parse_card(r)?);
+    }
+    Ok(cards)
+}
+
+fn parse_card(s: &str) -> Result<Card> {
+    Card::try_from(s).map_err(|e| anyhow!("parsing card '{s}': {e:?}"))
+}
+
+fn all_cards() -> Vec<Card> {
+    let mut cards = Vec::with_capacity(52);
+    for suit in Suit::suits() {
+        for value in Value::values() {
+            cards.push(Card::new(value, suit));
+        }
+    }
+    cards
 }

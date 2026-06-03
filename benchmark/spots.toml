@@ -1,0 +1,36 @@
+# Curated benchmark batch (Phase 1). The curated stored set IS the validation benchmark set:
+# one list, not two. Spots are chosen for verifiability and texture coverage.
+# Context: heads-up single-raised pot, BB out of position vs BTN in position.
+# Each row becomes a matrix entry with key {depth}bb_{board}_flop_srp-v1.
+
+[[spot]]
+board = "Ks7h2c"          # dry rainbow high
+stack_depth_bb = 100
+
+[[spot]]
+board = "9c5d3h"          # dry rainbow low
+stack_depth_bb = 100
+
+[[spot]]
+board = "AcKhQd"          # broadway rainbow
+stack_depth_bb = 50
+
+[[spot]]
+board = "Jc9h8c"          # two-tone (clubs), wet / connected
+stack_depth_bb = 100
+
+[[spot]]
+board = "Kh9h4h"          # monotone hearts
+stack_depth_bb = 100
+
+[[spot]]
+board = "7h7d2c"          # paired (sevens), rainbow
+stack_depth_bb = 100
+
+[[spot]]
+board = "6c5d4h"          # low connected, rainbow
+stack_depth_bb = 100
+
+[[spot]]
+board = "Qs8s5h"          # two-tone (spades)
+stack_depth_bb = 50

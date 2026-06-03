@@ -62,6 +62,10 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
 - `cargo check --workspace --all-targets`
 - Smoke (from repo root): `cargo run --release -p gto-store --example smoke`
   Converges below target, proves the store round-trip, writes `out/smoke.json` and a `matrix/` entry.
+- Curated matrix (Phase 1, from repo root): `cargo run --release -p gto-store --example build_matrix`
+  Solves the curated benchmark (`benchmark/spots.toml`) with the `srp-v1` tree (`phase1.toml`), asserts
+  invariants, stores each spot, and runs the rs_poker equity cross-check. Preflop ranges are authored
+  in-repo (`crates/preflop/data/hu_ranges.toml`); the curated stored set IS the validation benchmark.
 
 ## Writing conventions
 - No em dashes in any prose. Use hyphens, colons, or parentheses.

@@ -6,7 +6,7 @@
 use anyhow::{bail, Result};
 use gto_config::Config;
 use gto_engine::{solve_spot, Board, RakeSpec, Spot, SpotSolution, Street};
-use gto_preflop::{ranges_for, PreflopContext, PreflopNode};
+use gto_preflop::{PreflopCharts, PreflopContext, PreflopNode};
 use gto_store::{load_solution, spot_key, store_solution};
 
 fn main() -> Result<()> {
@@ -14,10 +14,11 @@ fn main() -> Result<()> {
 
     // Canonical smoke spot: 100bb HU single-raised pot, BB (OOP) vs BTN (IP), flop Td9d6h.
     // pot 5bb, effective 97.5bb. With chip_per_bb = 20 that is pot 100 / stack 1950 chips.
-    let (oop_range, ip_range) = ranges_for(&PreflopContext {
+    let charts = PreflopCharts::load_embedded()?;
+    let (oop_range, ip_range) = charts.ranges_for(&PreflopContext {
         stack_depth_bb: 100,
         node: PreflopNode::SingleRaisedPot,
-    });
+    })?;
     let spot = Spot {
         stack_depth_bb: 100,
         initial_street: Street::Flop,

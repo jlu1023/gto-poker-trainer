@@ -1,0 +1,32 @@
+# Phase 1 batch config: the `srp-v1` bet tree for the curated matrix.
+# Loaded by the build_matrix runner. Only the fields that differ from default.toml are set;
+# everything else falls back to Config::default() via serde(default).
+
+[solve]
+# Tighter than the smoke default is unnecessary here; keep 0.5% of pot for batch speed.
+target_exploit_pct_pot = 0.005
+max_iterations = 1000
+print_progress = false
+
+[solve.bet_tree]
+bet_tree_id = "srp-v1"
+# Two flop sizes (richer than smoke-v0's single size), single turn/river size, no raises.
+flop_bet_sizes = ["33%, 75%", "33%, 75%"]
+turn_bet_sizes = ["75%", "75%"]
+river_bet_sizes = ["75%", "75%"]
+flop_raise_sizes = ["", ""]
+turn_raise_sizes = ["", ""]
+river_raise_sizes = ["", ""]
+
+[solve.abstraction]
+# Compression on for the batch so a 100bb flop with two flop sizes stays under the RAM ceiling.
+use_compression = true
+add_allin_threshold = 1.5
+force_allin_threshold = 0.15
+merging_threshold = 0.1
+ram_ceiling_gb = 8.0
+
+[store]
+use_zstd = true
+# Level 9 (not 19) for batch speed; trees are already f16-compressed in memory.
+zstd_level = 9

@@ -83,3 +83,36 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
 3. Exact preflop chart source / format: import a published HU set; finalized Phase 1.
 4. Matrix index scaling: flat files + manifest at v1; SQLite index deferred.
 5. Packaging Tauri vs WASM: deferred; v1 dumps JSON for a local viewer.
+
+## Phase 1 decisions (2026-06-03)
+
+- **D18. Preflop ranges AUTHORED in-repo** (`crates/preflop/data/hu_ranges.toml`, 100bb + 50bb SRP)
+  from established HU GTO theory, NOT imported. No clean free importable HU set was confirmed; the top
+  candidate (AHTOOOXA/poker-charts) was refuted by adversarial verification (its range data does not
+  exist). Our authored data is license-clean. The real loader (`PreflopCharts`) replaces the Phase 0 stub.
+- **D19. opensolver DROPPED as a cross-check.** Verified: no LICENSE file (defaults to all rights
+  reserved) and isomorphism hardcoded-disabled (`iso_flag = 0` in src/isomorphism.rs), so it is legally
+  and practically unusable. External cross-check = rs_poker equity only. A properly-licensed reference
+  (CFRX / Pio API) is the future option.
+- **D20. rs_poker equity cross-check uses non-arena API** via a deterministic exhaustive turn+river
+  enumeration (rs_poker `RangeParser` + `Hand::rank`; the enumeration is ours). Tolerance 2%.
+- **D21. Curated benchmark = 8 SRP flop spots** (`benchmark/spots.toml`); the matrix IS the benchmark.
+  Spot keys `{depth}bb_{board}_flop_srp-v1`.
+- **D22. Bet tree `srp-v1`** (`phase1.toml`: flop 33%+75%, turn/river 75%, compression on, zstd-9). The
+  batch runner shrinks a spot's flop tree on a `ram_ceiling_gb` breach and logs the tradeoff (not
+  triggered in practice; all 8 spots fit).
+
+## Phase 1 findings
+
+- **F3 - The rs_poker research agent confabulated `OutsCalculator`.** It does not exist in rs_poker
+  4.1.0. Verified against the crate source: the non-arena equity primitives are `holdem::MonteCarloGame`
+  (random) and `holdem::RangeParser` + `core::Hand::rank` (Rankable). We use a deterministic exhaustive
+  enumeration built on `RangeParser` + `Hand::rank` for a stable, RNG-free gate. Lesson reinforced:
+  verify agent-reported API names against source before relying on them.
+
+## Phase 1 gate (passed)
+
+- `cargo check --workspace --all-targets` clean; `cargo test -p gto-preflop` 3/3.
+- All 8 curated spots solved below the 0.5% target (0.38% to 0.49% of pot), invariants passed, stored;
+  no shrink needed.
+- Equity cross-check on `100bb_Ks7h2c` (hero `2h2d`): solver 0.9535 vs rs_poker 0.9535, |diff| 0.0000.

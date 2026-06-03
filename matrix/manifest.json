@@ -1,6 +1,66 @@
 {
   "version": 1,
   "spots": {
+    "100bb_6c5d4h_flop_srp-v1": {
+      "file": "100bb_6c5d4h_flop_srp-v1.bin.zst",
+      "summary": "100bb_6c5d4h_flop_srp-v1.summary.json",
+      "stack_depth_bb": 100,
+      "board": "6c5d4h",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0041826726,
+      "iterations": 90
+    },
+    "100bb_7h7d2c_flop_srp-v1": {
+      "file": "100bb_7h7d2c_flop_srp-v1.bin.zst",
+      "summary": "100bb_7h7d2c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 100,
+      "board": "7h7d2c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0046344544,
+      "iterations": 100
+    },
+    "100bb_9c5d3h_flop_srp-v1": {
+      "file": "100bb_9c5d3h_flop_srp-v1.bin.zst",
+      "summary": "100bb_9c5d3h_flop_srp-v1.summary.json",
+      "stack_depth_bb": 100,
+      "board": "9c5d3h",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.004458408,
+      "iterations": 90
+    },
+    "100bb_Jc9h8c_flop_srp-v1": {
+      "file": "100bb_Jc9h8c_flop_srp-v1.bin.zst",
+      "summary": "100bb_Jc9h8c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 100,
+      "board": "Jc9h8c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0038321877,
+      "iterations": 80
+    },
+    "100bb_Kh9h4h_flop_srp-v1": {
+      "file": "100bb_Kh9h4h_flop_srp-v1.bin.zst",
+      "summary": "100bb_Kh9h4h_flop_srp-v1.summary.json",
+      "stack_depth_bb": 100,
+      "board": "Kh9h4h",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0041736774,
+      "iterations": 80
+    },
+    "100bb_Ks7h2c_flop_srp-v1": {
+      "file": "100bb_Ks7h2c_flop_srp-v1.bin.zst",
+      "summary": "100bb_Ks7h2c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 100,
+      "board": "Ks7h2c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.004278309,
+      "iterations": 90
+    },
     "100bb_Td9d6h_flop_smoke-v0": {
       "file": "100bb_Td9d6h_flop_smoke-v0.bin.zst",
       "summary": "100bb_Td9d6h_flop_smoke-v0.summary.json",
@@ -10,6 +70,26 @@
       "bet_tree": "smoke-v0",
       "exploitability_pct_pot": 0.0044593513,
       "iterations": 40
+    },
+    "50bb_AcKhQd_flop_srp-v1": {
+      "file": "50bb_AcKhQd_flop_srp-v1.bin.zst",
+      "summary": "50bb_AcKhQd_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "AcKhQd",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.00416299,
+      "iterations": 90
+    },
+    "50bb_Qs8s5h_flop_srp-v1": {
+      "file": "50bb_Qs8s5h_flop_srp-v1.bin.zst",
+      "summary": "50bb_Qs8s5h_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "Qs8s5h",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0048677386,
+      "iterations": 80
     }
   }
 }
