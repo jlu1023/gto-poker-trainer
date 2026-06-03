@@ -1,0 +1,17 @@
+[package]
+name = "gto-engine"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gto-config.workspace = true
+postflop-solver.workspace = true
+# resolution pins only (see root Cargo.toml): force bincode + its derive macro to the rc.3 that
+# postflop-solver targets, so the suspended crate compiles on stable
+bincode.workspace = true
+bincode_derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true

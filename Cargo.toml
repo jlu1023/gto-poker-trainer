@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+license = "AGPL-3.0-or-later"
+rust-version = "1.75"
+
+[workspace.dependencies]
+# external
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+anyhow = "1"
+# HUNL postflop CFR engine. Git-only, dev-suspended (Oct 2023), AGPL-3.0.
+# Pinned to the last known-good commit because upstream makes breaking changes without version bumps.
+# Default features (bincode, rayon) kept; zstd added for compressed tree storage.
+postflop-solver = { git = "https://github.com/b-inary/postflop-solver", rev = "9d1509fe5077d019825f833eed04b16d342dfda1", features = ["zstd"] }
+# Resolution pins: postflop-solver was written against bincode 2.0.0-rc.3, whose `Decode` trait has
+# no `Context` generic. The released bincode 2.0.x changed `Decode` to `Decode<Context>`, which does
+# not compile against postflop-solver. We pin the exact rc.3 of BOTH the library and its derive
+# macro (rc.3's own `^2.0.0-rc.3` requirement otherwise lets bincode_derive float to 2.0.1, producing
+# a lib/derive mismatch). This keeps the suspended crate building on current stable Rust, no fork.
+bincode = "=2.0.0-rc.3"
+bincode_derive = "=2.0.0-rc.3"
+# Independent hand evaluation / equity cross-check (validate crate). default-features = false drops
+# the `arena` feature, which uses a nightly-only feature (assert_matches) and breaks on stable. Core
+# hand evaluation (what we need for the equity cross-check) is not feature-gated.
+rs_poker = { version = "4", default-features = false }
+
+# internal members
+gto-config = { path = "crates/config" }
+gto-engine = { path = "crates/engine" }
+gto-preflop = { path = "crates/preflop" }
+gto-validate = { path = "crates/validate" }
+gto-store = { path = "crates/store" }
+
+[profile.release]
+# the solver is RAM- and compute-heavy; keep release fully optimized
+opt-level = 3
+lto = "thin"

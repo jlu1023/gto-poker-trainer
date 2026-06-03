@@ -1,0 +1,10 @@
+# build artifacts
+/target
+
+# smoke / engine JSON output
+/out
+
+# solved-spot cache: ignore the heavy serialized trees, keep the manifest tracked
+/matrix/*.bin
+/matrix/*.bin.zst
+/matrix/*.summary.json

@@ -1,0 +1,48 @@
+# gto-poker-bot default configuration.
+# This file mirrors `Config::default()`. Copy it, edit, and load with `Config::load(path)`.
+# Every value here is a tunable; the engine reads configuration, it does not hardcode it.
+
+[solve]
+# Chip resolution: integer chips per big blind. Chosen so bet sizes stay integer (10/20 game).
+chip_per_bb = 20
+# Convergence target as a fraction of the starting pot (0.005 = 0.5% of pot for smoke speed;
+# tighten toward 0.003 for production solves).
+target_exploit_pct_pot = 0.005
+# Hard cap on solve iterations.
+max_iterations = 1000
+print_progress = true
+
+[solve.bet_tree]
+# Label baked into spot keys so different trees never collide in the matrix.
+bet_tree_id = "smoke-v0"
+# Per street, per [OOP, IP]. Empty string = no sizes of that kind.
+flop_bet_sizes = ["33%", "33%"]
+turn_bet_sizes = ["50%", "50%"]
+river_bet_sizes = ["50%", "50%"]
+flop_raise_sizes = ["", ""]
+turn_raise_sizes = ["", ""]
+river_raise_sizes = ["", ""]
+# turn_donk_sizes / river_donk_sizes are optional; omit for none.
+
+[solve.abstraction]
+use_compression = false
+add_allin_threshold = 1.5
+force_allin_threshold = 0.15
+merging_threshold = 0.1
+ram_ceiling_gb = 8.0
+
+[stacks]
+stack_depths_bb = [100, 50, 20]
+default_stack_bb = 100
+
+[rake]
+rake_rate = 0.0
+rake_cap = 0.0
+
+[io]
+out_dir = "out"
+matrix_dir = "matrix"
+
+[store]
+use_zstd = true
+zstd_level = 19

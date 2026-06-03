@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "spots": {
+    "100bb_Td9d6h_flop_smoke-v0": {
+      "file": "100bb_Td9d6h_flop_smoke-v0.bin.zst",
+      "summary": "100bb_Td9d6h_flop_smoke-v0.summary.json",
+      "stack_depth_bb": 100,
+      "board": "Td9d6h",
+      "street": "flop",
+      "bet_tree": "smoke-v0",
+      "exploitability_pct_pot": 0.0044593513,
+      "iterations": 40
+    }
+  }
+}
