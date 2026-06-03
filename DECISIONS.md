@@ -116,3 +116,35 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
 - All 8 curated spots solved below the 0.5% target (0.38% to 0.49% of pot), invariants passed, stored;
   no shrink needed.
 - Equity cross-check on `100bb_Ks7h2c` (hero `2h2d`): solver 0.9535 vs rs_poker 0.9535, |diff| 0.0000.
+
+## Phase 2 decisions
+
+- **D23. Packaging = native Rust JSON export + static Vite/TS front-end** for the read-only v1 viz. The
+  viz only reads stored solves, which collapses the Tauri-vs-WASM tradeoff. Tauri is the chosen EVENTUAL
+  packaging (over WASM) for when live re-query/solving is added; deferred; the front-end is built
+  Tauri-ready. WASM rejected.
+- **D24. Data path** = matrix -> `gto-store` example `export_viz` (native; `load_manifest` +
+  `load_solution`, root node) -> `viz/public/data/*.json` -> Vite/TS fetch. Read-only, no solving in the
+  UI, root only for v1 (`query_node` for deeper nodes is deferred).
+- **D25. Data contract** = per-spot JSON (board, street, stacks, pot, exploitability, hero/villain seats,
+  actions, hands[{hand, strategy, ev, equity}]) + an `index.json`. The exporter reshapes the solver's
+  `strategy[hand + action*n]` into per-hand arrays.
+- **D26. Strategy readout** = a 13x13 OOP root action-frequency grid (primary) + a per-hand detail panel
+  (action mix / EV / equity); a per-hand-only readout is the documented fallback if the grid is heavy.
+
+## Phase 2 findings
+
+- **F4. WASM rejected for the viz** (adversarially verified). zstd-sys will not C-compile to wasm32;
+  rayon needs nightly + atomics + COOP/COEP; postflop-solver has no wasm tree-loader; eager 39 MB
+  bincode in-browser is wasteful; and a read-only viz needs no engine in the browser at all. The native
+  JSON-export + static front-end path avoids all of this.
+
+## Phase 2 gate (passed 2026-06-03)
+
+- `cargo check --workspace --all-targets` clean; `npm run build` clean.
+- All 9 stored spots render from the real matrix: board=3, hero=2, 169 grid cells, bars, detail, zero
+  console errors.
+- AKs equity on `100bb_Ks7h2c` displayed 89.6%, expected 89.6%, diff 0.012% (within f32 tolerance).
+- AKs aggregation Check=9%, Bet(33)=87%, Bet(75)=4% - exact match vs raw JSON means over 3 non-blocked
+  combos (AsKs absent, blocked by Ks board card; weight-correct via actual combo count).
+- All rendering original CSS/SVG (no branded/external card assets).
