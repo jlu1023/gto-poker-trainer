@@ -18,6 +18,7 @@ pub struct Config {
     pub rake: RakeConfig,
     pub io: IoConfig,
     pub store: StoreConfig,
+    pub trainer: TrainerConfig,
 }
 
 /// Everything `engine::solve_spot` needs to turn a `Spot` into a solver query and run it.
@@ -106,6 +107,21 @@ pub struct StoreConfig {
     pub zstd_level: i32,
 }
 
+/// Trainer verdict bands (Phase 4). All EV-loss thresholds are fractions of the starting pot.
+/// Verdict precedence: Correct (loss <= eps) > FineMix (freq >= floor AND loss <= minor max)
+/// > MinorLeak (loss <= minor max) > ClearLeak.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TrainerConfig {
+    /// Chosen action within this EV of the best action -> Correct regardless of frequency.
+    /// Default equals the solve convergence target: verdicts are honest to solve precision.
+    pub correct_eps_pct_pot: f64,
+    /// EV loss above this -> ClearLeak.
+    pub minor_leak_max_pct_pot: f64,
+    /// Solver frequency at or above this (with small loss) -> FineMix, not a mistake.
+    pub mix_freq_floor: f64,
+}
+
 impl Config {
     /// Load a configuration from a TOML file. Missing fields fall back to defaults.
     pub fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
@@ -123,6 +139,17 @@ impl Default for Config {
             rake: RakeConfig::default(),
             io: IoConfig::default(),
             store: StoreConfig::default(),
+            trainer: TrainerConfig::default(),
+        }
+    }
+}
+
+impl Default for TrainerConfig {
+    fn default() -> Self {
+        Self {
+            correct_eps_pct_pot: 0.005,
+            minor_leak_max_pct_pot: 0.02,
+            mix_freq_floor: 0.10,
         }
     }
 }

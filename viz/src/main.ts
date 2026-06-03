@@ -4,6 +4,7 @@ import type { ClassAgg } from "./grid";
 import { renderTable } from "./table";
 import { renderGrid, actionColors } from "./grid";
 import { initSolvePanel } from "./solve";
+import { initTrainer } from "./trainer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("missing #app");
@@ -24,6 +25,10 @@ function humanAction(label: string): string {
 app.innerHTML = `
   <header class="topbar">
     <div class="brand"><span class="brand-mark">◈</span>GTO&nbsp;<em>Lab</em></div>
+    <div class="mode-toggle" role="tablist" aria-label="mode">
+      <button id="modeExplore" class="mode-btn mode-btn--active" type="button">explore</button>
+      <button id="modeTrain" class="mode-btn" type="button">train</button>
+    </div>
     <div class="selector-wrap">
       <label for="spot">spot</label>
       <select id="spot" aria-label="stored spot"></select>
@@ -41,6 +46,7 @@ app.innerHTML = `
     <div class="ss-track" id="ssTrack"><div class="ss-fill" id="ssFill"></div></div>
     <span class="ss-value" id="ssValue"></span>
   </div>
+  <div id="trainerHost" class="trainer" data-phase="entry" hidden></div>
   <main class="stage">
     <section class="table-panel" id="tableHost"></section>
     <aside class="data-panel">
@@ -87,13 +93,15 @@ function renderLegend(spot: SpotContract, colors: string[]) {
 }
 
 function renderDetail(spot: SpotContract, colors: string[], agg: ClassAgg) {
+  const hasEv = agg.evActions.length === spot.actions.length;
   const bars = spot.actions
     .map(
       (a, i) => `
-      <div class="dbar">
+      <div class="dbar ${hasEv ? "dbar--ev" : ""}">
         <div class="dbar-label">${humanAction(a)}</div>
         <div class="dbar-track"><div class="dbar-fill" style="width:${(agg.strategy[i] * 100).toFixed(0)}%;background:${colors[i]}"></div></div>
         <div class="dbar-val">${(agg.strategy[i] * 100).toFixed(0)}%</div>
+        ${hasEv ? `<div class="dbar-ev">${agg.evActions[i].toFixed(1)}</div>` : ""}
       </div>`,
     )
     .join("");
@@ -109,8 +117,10 @@ function renderDetail(spot: SpotContract, colors: string[], agg: ClassAgg) {
     </div>`;
 }
 
-/** Render a spot (from a static file, the session cache, or a live solve). */
-function renderSpot(spot: SpotContract) {
+/** Render a spot (from a static file, the session cache, or a live solve). When
+ *  `selectClassLabel` is given (trainer reveal), that hand class is selected instead of the
+ *  default first in-range cell. */
+function renderSpot(spot: SpotContract, selectClassLabel?: string) {
   const colors = actionColors(spot.actions);
   renderMeta(spot);
   renderLegend(spot, colors);
@@ -120,13 +130,15 @@ function renderSpot(spot: SpotContract) {
   };
   drawTable(null);
 
-  const { el, selectDefault } = renderGrid(spot, (agg) => {
+  const { el, selectDefault, selectClass } = renderGrid(spot, (agg) => {
     const hero = [agg.rep.slice(0, 2), agg.rep.slice(2, 4)];
     drawTable(hero);
     renderDetail(spot, colors, agg);
   });
   gridHost.replaceChildren(el);
-  selectDefault();
+  if (!selectClassLabel || !selectClass(selectClassLabel)) {
+    selectDefault();
+  }
 }
 
 async function loadSpot(key: string) {
@@ -146,7 +158,7 @@ async function loadSpot(key: string) {
 }
 
 /** A live solve (fresh or cached) finished: remember it, list it, render it. */
-function onSolved(payload: SolveComplete) {
+function onSolved(payload: SolveComplete, selectClassLabel?: string) {
   const spot = payload.spot;
   sessionSpots.set(spot.key, spot);
   if (![...selector.options].some((o) => o.value === spot.key)) {
@@ -156,7 +168,33 @@ function onSolved(payload: SolveComplete) {
     selector.appendChild(opt);
   }
   selector.value = spot.key;
-  renderSpot(spot);
+  renderSpot(spot, selectClassLabel);
+}
+
+// ---- mode toggle (explore / train) ----
+function initModeToggle() {
+  const exploreBtn = app!.querySelector<HTMLButtonElement>("#modeExplore")!;
+  const trainBtn = app!.querySelector<HTMLButtonElement>("#modeTrain")!;
+  const trainerHost = document.querySelector<HTMLElement>("#trainerHost")!;
+
+  const setMode = (mode: "explore" | "train") => {
+    document.body.classList.toggle("mode-train", mode === "train");
+    exploreBtn.classList.toggle("mode-btn--active", mode === "explore");
+    trainBtn.classList.toggle("mode-btn--active", mode === "train");
+    trainerHost.hidden = mode !== "train";
+    if (mode === "train") {
+      // entering train mode blanks the stage: nothing solver-derived pre-commit (D35)
+      showStageMessage(
+        "Trainer",
+        "Set up a spot (depth, board, your hand) and commit to an action. The solver's answer reveals only after you commit.",
+      );
+    } else if (selector.value) {
+      void loadSpot(selector.value);
+    }
+  };
+
+  exploreBtn.addEventListener("click", () => setMode("explore"));
+  trainBtn.addEventListener("click", () => setMode("train"));
 }
 
 async function main() {
@@ -172,6 +210,17 @@ async function main() {
     },
     onSolved,
   );
+
+  initModeToggle();
+  initTrainer({
+    host: document.querySelector<HTMLElement>("#trainerHost")!,
+    onReveal: (payload, handClass) => onSolved(payload, handClass),
+    blankStage: () =>
+      showStageMessage(
+        "Trainer",
+        "Set up a spot (depth, board, your hand) and commit to an action. The solver's answer reveals only after you commit.",
+      ),
+  });
 
   let index: IndexFile;
   try {

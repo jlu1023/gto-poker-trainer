@@ -140,6 +140,23 @@ pub fn load_solution(spot_key: &str, cfg: &Config) -> Result<SpotSolution> {
     })
 }
 
+/// Load only the summary sidecar for a stored spot (no tree deserialization). The fast path
+/// for grading: the root in a freshly-written sidecar carries per-action EV; sidecars stored
+/// before that field existed deserialize with it empty, and callers fall back to
+/// `load_solution` (which recomputes the root from the tree).
+pub fn load_summary(spot_key: &str, cfg: &Config) -> Result<SpotSolutionSummary> {
+    let dir = Path::new(&cfg.io.matrix_dir);
+    let manifest = load_manifest(dir)?;
+    let entry = manifest
+        .spots
+        .get(spot_key)
+        .ok_or_else(|| anyhow!("spot key '{spot_key}' not found in matrix manifest"))?;
+    let summary_path = dir.join(&entry.summary);
+    let text = std::fs::read_to_string(&summary_path)
+        .with_context(|| format!("reading summary {}", summary_path.display()))?;
+    Ok(serde_json::from_str(&text)?)
+}
+
 /// Read the matrix manifest, returning an empty one if it does not exist yet.
 pub fn load_manifest(dir: &Path) -> Result<Manifest> {
     let path = manifest_path(dir);

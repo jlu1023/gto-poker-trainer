@@ -13,6 +13,8 @@
 //! effective stack, both ranges, and rake. Money is carried in big blinds and converted to integer
 //! chips via `chip_per_bb` at mapping time.
 
+pub mod grade;
+
 use anyhow::{anyhow, bail, Result};
 use gto_config::SolveConfig;
 use postflop_solver::{
@@ -94,10 +96,15 @@ pub struct NodeStrategy {
     pub hands: Vec<String>,
     /// Action probabilities, indexed `strategy[hand + action * num_hands]`.
     pub strategy: Vec<f32>,
-    /// Expected value per hand (chips).
+    /// Expected value per hand (chips), weighted across the strategy mix.
     pub ev: Vec<f32>,
     /// Equity per hand (0..1).
     pub equity: Vec<f32>,
+    /// Per-action expected value (chips), indexed `[hand + action * num_hands]` like `strategy`.
+    /// Filled for ROOT reads (Phase 4 grading); empty on deeper-node queries and on summary
+    /// sidecars stored before this field existed (serde default).
+    #[serde(default)]
+    pub ev_per_action: Vec<f32>,
 }
 
 /// A solved spot. Owns the solved game so it can be persisted natively and queried after reload
@@ -223,10 +230,61 @@ where
     })
 }
 
-/// Read the root node of an already-solved game.
+/// Read the root node of an already-solved game, including per-action EV (Phase 4 grading).
 pub fn read_root(game: &mut PostFlopGame) -> Result<NodeStrategy> {
     game.back_to_root();
-    read_current_node(game)
+    let mut node = read_current_node(game)?;
+    node.ev_per_action = root_action_evs(game, &node);
+    game.back_to_root();
+    Ok(node)
+}
+
+/// EV per (hand, action) at the root, layout `[hand + action * n]` (same as `strategy`).
+///
+/// `expected_values_detail(player)` AT the player's own decision node returns exactly this:
+/// one row per action, every row normalized to the same money reference point
+/// (`starting_pot/2 + node.amount + bias`, interpreter.rs:795), so the values are directly
+/// comparable across actions. Reading children instead would shift each action's reference by
+/// its own bet amount and fabricate EV differences that track bet size.
+fn root_action_evs(game: &mut PostFlopGame, node: &NodeStrategy) -> Vec<f32> {
+    let n = node.hands.len();
+    let num_actions = node.actions.len();
+    game.back_to_root();
+    game.cache_normalized_weights();
+    let detail = game.expected_values_detail(node.player);
+    if detail.len() == n * num_actions {
+        detail
+    } else {
+        // unexpected shape (e.g. a non-decision root); leave grading data absent rather than wrong
+        Vec::new()
+    }
+}
+
+/// The legal root actions for a spot, derived from the bet-tree config alone (no card
+/// abstraction, no allocation, no solving). Used by the trainer to render commit buttons
+/// BEFORE any solver output exists. Labels use the same renderer as solved contracts, so they
+/// match the action set the solve produces exactly.
+pub fn root_actions(spot: &Spot, cfg: &SolveConfig) -> Result<Vec<String>> {
+    let tree_config = build_tree_config(spot, cfg)?;
+    let tree = ActionTree::new(tree_config).map_err(|e| anyhow!("action tree: {e}"))?;
+    Ok(tree.available_actions().iter().map(render_action).collect())
+}
+
+/// Weight of a specific two-card combo in a range string (0 = not in range). Preflop chart
+/// data, not solver output; used by the trainer's pre-commit hand check.
+pub fn hand_range_weight(range_str: &str, hand: &str) -> Result<f32> {
+    let range: Range = range_str
+        .parse()
+        .map_err(|e| anyhow!("range parse: {e}"))?;
+    if hand.len() != 4 {
+        bail!("hand '{hand}' must be 4 chars like AhKh");
+    }
+    let c1 = card_from_str(&hand[0..2]).map_err(|e| anyhow!("card '{}': {e}", &hand[0..2]))?;
+    let c2 = card_from_str(&hand[2..4]).map_err(|e| anyhow!("card '{}': {e}", &hand[2..4]))?;
+    if c1 == c2 {
+        bail!("hand '{hand}' uses the same card twice");
+    }
+    Ok(range.get_weight_by_cards(c1, c2))
 }
 
 /// Walk a solved game to the node identified by `query` and read it.
@@ -262,6 +320,7 @@ pub fn query_node(solution: &mut SpotSolution, query: &NodeQuery) -> Result<Node
 }
 
 /// Read the strategy / EV / equity at whatever node the game is currently positioned on.
+/// `ev_per_action` is left empty here; `read_root` fills it for the root.
 fn read_current_node(game: &mut PostFlopGame) -> Result<NodeStrategy> {
     if game.is_chance_node() {
         bail!("cannot read a strategy at a chance node");
@@ -288,6 +347,7 @@ fn read_current_node(game: &mut PostFlopGame) -> Result<NodeStrategy> {
         strategy,
         ev,
         equity,
+        ev_per_action: Vec::new(),
     })
 }
 

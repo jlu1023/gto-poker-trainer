@@ -26,16 +26,54 @@ use tokio::sync::mpsc;
 
 use crate::state::AppState;
 
-/// Phase 3 scope: 50bb single-raised pots only.
-const DEPTH_BB: u32 = 50;
 /// SRP geometry (matches build_matrix): BTN raises 2.5bb, BB calls.
-const SRP_POT_BB: f64 = 5.0;
-const SRP_RAISE_BB: f64 = 2.5;
+pub(crate) const SRP_POT_BB: f64 = 5.0;
+pub(crate) const SRP_RAISE_BB: f64 = 2.5;
+/// Phase 3 default; Phase 4 makes depth selectable (any depth with authored SRP ranges).
+pub(crate) const DEFAULT_DEPTH_BB: u32 = 50;
+
+pub(crate) fn default_depth() -> u32 {
+    DEFAULT_DEPTH_BB
+}
 
 #[derive(Debug, Deserialize)]
 pub struct SolveRequest {
     /// Three card strings, any order/case, e.g. ["Ks","7h","2c"].
     pub board: Vec<String>,
+    /// Stack depth in bb. Supported depths = the authored SRP ranges (50, 100); anything else
+    /// returns the ranges error. Defaults to 50 (Phase 3 back-compat).
+    #[serde(default = "default_depth")]
+    pub depth: u32,
+}
+
+/// Canonicalize + validate a board, fetch the authored SRP ranges for `depth`, and build the
+/// `Spot` + cache key. Shared by the solve, setup, and grade handlers so every path produces
+/// identical keys and geometry.
+pub(crate) fn build_srp_spot(
+    state: &AppState,
+    board: &[String],
+    depth: u32,
+) -> Result<(Spot, String), String> {
+    let flop = canonical_board(board)?;
+    let (oop_range, ip_range) = state
+        .charts
+        .ranges_for(&PreflopContext {
+            stack_depth_bb: depth,
+            node: PreflopNode::SingleRaisedPot,
+        })
+        .map_err(|e| format!("ranges not available for this spot: {e}"))?;
+    let spot = Spot {
+        stack_depth_bb: depth,
+        initial_street: Street::Flop,
+        board: Board { flop, turn: None, river: None },
+        pot_bb: SRP_POT_BB,
+        effective_stack_bb: depth as f64 - SRP_RAISE_BB,
+        oop_range,
+        ip_range,
+        rake: RakeSpec::default(),
+    };
+    let key = spot_key(&spot, &state.cfg.solve.bet_tree);
+    Ok((spot, key))
 }
 
 /// Everything that can travel down the SSE stream.
@@ -98,29 +136,8 @@ async fn run(
     req: SolveRequest,
     tx: &mpsc::Sender<Update>,
 ) -> Result<Update, String> {
-    let flop = canonical_board(&req.board)?;
-
-    // unsupported pot type / depth -> clear error, never guessed ranges
-    let (oop_range, ip_range) = state
-        .charts
-        .ranges_for(&PreflopContext {
-            stack_depth_bb: DEPTH_BB,
-            node: PreflopNode::SingleRaisedPot,
-        })
-        .map_err(|e| format!("ranges not available for this spot: {e}"))?;
-
-    let spot = Spot {
-        stack_depth_bb: DEPTH_BB,
-        initial_street: Street::Flop,
-        board: Board { flop, turn: None, river: None },
-        pot_bb: SRP_POT_BB,
-        effective_stack_bb: DEPTH_BB as f64 - SRP_RAISE_BB,
-        oop_range,
-        ip_range,
-        rake: RakeSpec::default(),
-    };
-
-    let key = spot_key(&spot, &state.cfg.solve.bet_tree);
+    // canonical board + ranges (unsupported pot type / depth -> clear error, never guessed)
+    let (spot, key) = build_srp_spot(state, &req.board, req.depth)?;
     // a board that previously hit the RAM ceiling is cached under the shrunk tree id
     let shrunk_key = format!("{key}-shrunk");
 
@@ -229,7 +246,7 @@ const SUITS: &[u8] = b"cdhs"; // index order doubles as the suit tiebreak (s > h
 /// Validate and canonicalize a submitted flop. Canonical order = rank desc, then suit desc
 /// (s > h > d > c), matching the Phase 1 benchmark keys, so any typing order of the same three
 /// cards maps to ONE spot key (cache correctness).
-fn canonical_board(cards: &[String]) -> Result<[String; 3], String> {
+pub(crate) fn canonical_board(cards: &[String]) -> Result<[String; 3], String> {
     if cards.len() != 3 {
         return Err(format!("a flop needs exactly 3 cards, got {}", cards.len()));
     }

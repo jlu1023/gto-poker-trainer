@@ -164,6 +164,63 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   key needed pinning. The shrunk-tree variant key (`...-shrunk`) is also checked on lookup so a
   RAM-shrunk board still cache-hits.
 
+## Phase 4 decisions
+
+- **D32. Grading model = two numbers + banded verdict, mixed-strategy aware.** Frequency of the
+  chosen action + EV loss vs the best action (chips and % pot). Verdict precedence: Correct
+  (loss <= eps) > FineMix (freq >= floor AND loss <= minor max) > MinorLeak > ClearLeak. A
+  low-frequency near-zero-loss pick is a fine mix, never a punished mistake; within-epsilon is
+  Correct regardless of frequency. Off-tree actions map to the nearest available with a notice.
+- **D33. Per-action EV plumbing**: `NodeStrategy.ev_per_action` (serde-default), computed in
+  `read_root` by play -> cache_normalized_weights -> expected_values(root_player) per action
+  (verified: interpreter.rs:672 supports reading the non-current player). `load_solution`
+  recomputes the root, so every cached spot gets per-action EV with no migration.
+- **D34. Trainer endpoints on the existing server**: GET `/api/setup` (legal actions from
+  `ActionTree::available_actions()` (board-independent, no solve), hand-in-range via
+  `Range::get_weight_by_cards`, cached flag); `/api/solve` gains `depth` (50|100 allowlist,
+  default 50); POST `/api/grade` (summary-first load, engine-side pure grading fn).
+- **D35. Commit-then-reveal enforced by data absence**: pre-commit the client holds only action
+  labels + booleans; no solve/grade/static fetch fires until the commit click. Gate test
+  intercepts network traffic to prove it.
+- **D36. Verdict bands in config** (`[trainer]`): correct_eps_pct_pot = 0.005 (= the solver
+  convergence target; verdicts are honest to solve precision), minor_leak_max_pct_pot = 0.02,
+  mix_freq_floor = 0.10. Front-end renders verdicts, never computes them.
+- **D37. Session history = in-memory list** (board, depth, hand, action, verdict, EV loss;
+  running + average EV loss). Persistence / spaced repetition / randomized spots deferred.
+
+## Phase 4 findings
+
+- **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,
+  never by navigating into children.** The plan's original mechanism (play into each child,
+  read `expected_values` there) returns values whose money reference point shifts by the bet
+  amount of each branch: on 50bb 8d6s3c, AsAc showed Check 202.3 / Bet(33) 235.5 / Bet(75)
+  277.2 - "EV gaps" of +33 and +42 chips exactly tracking the bet sizes, impossible at
+  equilibrium for a 5/73/22-mixed hand. `expected_values_detail(player)` at the decision node
+  applies one shared offset (`starting_pot/2 + node.amount + bias`, interpreter.rs:795) to
+  every action row, giving directly comparable EVs: the same hand reads 202.30 / 202.47 /
+  202.19 (0.28-chip spread, equilibrium-consistent). Caught by sanity-checking exported data
+  against mixed-strategy theory before wiring the grader.
+
+## Phase 4 gate (passed 2026-06-04)
+
+- `cargo check` clean; 9 grading unit tests green; `npm run build` clean.
+- All FOUR verdict bands found in real solved data and reconciled exactly against a python
+  recomputation (frequency to 1e-4, EV loss to 0.01 chips, band arithmetic, best action):
+  clear_leak = Ah2h Bet(33) on 50bb 8d6s3c (3.79% pot loss), fine_mix = Ad3d Bet(75) (37%
+  frequency, 0.63% pot), minor_leak = Ah4h Bet(75) (9.9% freq, 0.52% pot), correct = 2d2c
+  Check (0.05% pot).
+- Commit gate held on all three UI rounds: zero /api/solve, /api/grade, and data/*.json
+  requests pre-commit, zero grid cells in the DOM pre-commit; solve+grade fire only after the
+  commit click. Fresh board 9s6h3d: committed BEFORE any solve existed anywhere, 9 progress
+  samples streamed, solved + graded in 20.3 s.
+- Both depths through the UI: 50bb cached (3.7 s reveal, 0 progress events) and 100bb
+  Ks7h2c (key `100bb_Ks7h2c_flop_srp-v1` in the selector proves depth flows into the cache
+  key). AA cell pre-selected on reveal; session history shows 3 rows + running EV loss.
+- Off-tree Bet(50) maps to Bet(33) with a `mapped_from` notice. Collision (client-side, zero
+  requests), out-of-range hand (setup flag + grade error), unsupported depth, and
+  unsolved-spot (409) all error cleanly. Zero console/page errors.
+- Phase 2 (`verify_viz.py`) and Phase 3 (`verify_solve.py`) gates re-run green.
+
 ## Phase 3 gate (passed 2026-06-03)
 
 - `cargo check --workspace --all-targets` clean; `npm run build` clean; server + canonicalization

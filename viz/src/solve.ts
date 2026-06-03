@@ -7,7 +7,7 @@
 
 import type { SolveComplete, SolveProgressMsg } from "./types";
 
-const SERVER = "http://127.0.0.1:7474";
+export const SERVER = "http://127.0.0.1:7474";
 /// srp-v1 convergence target (fraction of pot); the bar fills as exploitability approaches it.
 const TARGET = 0.005;
 
@@ -32,14 +32,18 @@ export function parseFlop(raw: string): { cards?: string[]; error?: string } {
   return { cards };
 }
 
-interface SolveCallbacks {
+export interface SolveCallbacks {
   onProgress(p: SolveProgressMsg): void;
   onComplete(payload: SolveComplete): void;
   onError(message: string): void;
 }
 
 /** POST the board and dispatch the SSE events. Exactly one terminal callback fires. */
-async function requestSolve(board: string[], cb: SolveCallbacks): Promise<void> {
+export async function requestSolve(
+  board: string[],
+  cb: SolveCallbacks,
+  depth = 50,
+): Promise<void> {
   let done = false;
   const fail = (message: string) => {
     if (!done) {
@@ -53,7 +57,7 @@ async function requestSolve(board: string[], cb: SolveCallbacks): Promise<void> 
     res = await fetch(`${SERVER}/api/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ board }),
+      body: JSON.stringify({ board, depth }),
     });
   } catch {
     fail("solve server unreachable; start it with: cargo run --release -p gto-server");

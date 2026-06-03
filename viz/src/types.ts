@@ -5,6 +5,9 @@ export interface HandEntry {
   strategy: number[];
   ev: number;
   equity: number;
+  /// Per-action EV (chips), aligned with `actions`. May be absent/empty on data exported
+  /// before Phase 4.
+  ev_actions?: number[];
 }
 
 export interface Seat {
@@ -56,4 +59,43 @@ export interface SolveComplete {
   cached: boolean;
   shrunk: boolean;
   spot: SpotContract;
+}
+
+// ---- Phase 4 trainer ----
+
+/// GET /api/setup response: pre-commit data ONLY (labels and booleans, no strategy).
+export interface SetupResponse {
+  key: string;
+  depth: number;
+  board: string[];
+  hand: string;
+  hand_in_range: boolean;
+  actions: string[];
+  cached: boolean;
+}
+
+export type Verdict = "correct" | "fine_mix" | "minor_leak" | "clear_leak";
+
+export interface GradeDistributionRow {
+  action: string;
+  frequency: number;
+  ev: number;
+}
+
+/// POST /api/grade response: the verdict for the committed action.
+export interface GradeResponse {
+  key: string;
+  depth: number;
+  hand: string;
+  chosen_action: string;
+  mapped_from: string | null;
+  frequency: number;
+  ev_chosen: number;
+  ev_best: number;
+  ev_loss_chips: number;
+  ev_loss_pct_pot: number;
+  best_action: string;
+  verdict: Verdict;
+  pot_chips: number;
+  distribution: GradeDistributionRow[];
 }

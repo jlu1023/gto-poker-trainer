@@ -28,6 +28,9 @@ pub struct HandEntry {
     pub strategy: Vec<f32>,
     pub ev: f32,
     pub equity: f32,
+    /// Per-action EV (chips), aligned with `actions`. Empty when the loaded root predates
+    /// per-action EV (old summary sidecars); always filled on fresh reads.
+    pub ev_actions: Vec<f32>,
 }
 
 /// One spot, exactly as the front-end consumes it (`viz/src/types.ts` `SpotContract`).
@@ -53,12 +56,18 @@ pub fn build_contract(key: &str, solution: &SpotSolution) -> SpotContract {
     let n = root.hands.len();
     let num_actions = root.actions.len();
 
+    let has_epa = root.ev_per_action.len() == n * num_actions;
     let hands = (0..n)
         .map(|i| HandEntry {
             hand: root.hands[i].clone(),
             strategy: (0..num_actions).map(|a| root.strategy[i + a * n]).collect(),
             ev: root.ev.get(i).copied().unwrap_or(0.0),
             equity: root.equity.get(i).copied().unwrap_or(0.0),
+            ev_actions: if has_epa {
+                (0..num_actions).map(|a| root.ev_per_action[i + a * n]).collect()
+            } else {
+                Vec::new()
+            },
         })
         .collect();
 

@@ -71,6 +71,16 @@
       "exploitability_pct_pot": 0.0044593513
     },
     {
+      "key": "50bb_8d6s3c_flop_srp-v1",
+      "board": [
+        "8d",
+        "6s",
+        "3c"
+      ],
+      "stack_depth_bb": 50,
+      "exploitability_pct_pot": 0.004095156
+    },
+    {
       "key": "50bb_AcKhQd_flop_srp-v1",
       "board": [
         "Ac",

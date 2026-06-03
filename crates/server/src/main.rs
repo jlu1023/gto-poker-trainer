@@ -9,6 +9,7 @@
 
 mod solve;
 mod state;
+mod trainer;
 
 use anyhow::Context;
 use axum::routing::{get, post};
@@ -49,6 +50,8 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/solve", post(solve::solve_handler))
+        .route("/api/setup", get(trainer::setup_handler))
+        .route("/api/grade", post(trainer::grade_handler))
         .layer(cors)
         .with_state(app_state);
 

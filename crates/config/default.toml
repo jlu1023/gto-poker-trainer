@@ -48,3 +48,12 @@ solve_timeout_secs = 300
 [store]
 use_zstd = true
 zstd_level = 19
+
+[trainer]
+# Verdict bands for the Phase 4 trainer (EV-loss thresholds as fractions of the starting pot).
+# Precedence: Correct (loss <= eps) > FineMix (freq >= floor AND loss <= minor max)
+# > MinorLeak (loss <= minor max) > ClearLeak.
+# correct_eps equals the solve convergence target: verdicts are honest to solve precision.
+correct_eps_pct_pot = 0.005
+minor_leak_max_pct_pot = 0.02
+mix_freq_floor = 0.10

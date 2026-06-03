@@ -72,11 +72,18 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   in-repo (`crates/preflop/data/hu_ranges.toml`); the curated stored set IS the validation benchmark.
 - Viz export (Phase 2, from repo root): `cargo run --release -p gto-store --example export_viz`
   writes `viz/public/data/*.json`; then `npm run dev` (or `build`) inside `viz/`.
-- Solve server (Phase 3, from repo root): `cargo run --release -p gto-server`
-  Listens on `127.0.0.1:7474` (50bb SRP only, tree `srp-v1`, loads `phase1.toml`). The viz solve
-  panel POSTs to it; fresh solves stream SSE progress, pass invariants, and cache to `matrix/`.
-- Gates: `verify_viz.py` (Phase 2) and `verify_solve.py` (Phase 3), both run with the Python 3.12
-  interpreter that has Playwright (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`).
+- Solve server (Phase 3+4, from repo root): `cargo run --release -p gto-server`
+  Listens on `127.0.0.1:7474` (SRP, depths with authored ranges: 50/100bb; tree `srp-v1`; loads
+  `phase1.toml`). Endpoints: `/api/health`, `/api/solve` (SSE; depth in the body), `/api/setup`
+  (trainer pre-commit: legal actions + hand-in-range, no strategy data), `/api/grade` (verdict
+  for a committed action; bands from `[trainer]` config).
+- Trainer (Phase 4): the viz "train" mode. Commit-then-reveal is enforced by data absence: the
+  client fetches nothing solver-derived until the action is committed. Grading is engine-side
+  (`gto_engine::grade`, pure + unit-tested); per-action EV comes from `expected_values_detail`
+  at the root (see DECISIONS F5: child-node navigation gives reference-shifted EVs, never use it).
+- Gates: `verify_viz.py` (Phase 2), `verify_solve.py` (Phase 3), `verify_trainer.py` (Phase 4),
+  all run with the Python 3.12 interpreter that has Playwright
+  (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`).
 
 ## Writing conventions
 - No em dashes in any prose. Use hyphens, colons, or parentheses.

@@ -23,11 +23,14 @@ export interface ClassAgg {
   strategy: number[];
   ev: number;
   equity: number;
+  /// Per-action EV means (chips), aligned with actions; empty when the data lacks ev_actions.
+  evActions: number[];
   count: number;
   rep: string; // a representative concrete combo, e.g. "AsKs"
 }
 
-function classOf(hand: string): string {
+/** Hand-class label for a concrete combo: "AsKs" -> "AKs", "2c2d" -> "22". */
+export function classOf(hand: string): string {
   const r0 = hand[0];
   const s0 = hand[1];
   const r1 = hand[2];
@@ -39,14 +42,26 @@ function classOf(hand: string): string {
 
 function aggregate(spot: SpotContract): Map<string, ClassAgg> {
   const map = new Map<string, ClassAgg>();
+  const hasEvActions = spot.hands.every((h) => (h.ev_actions?.length ?? 0) === spot.actions.length);
   for (const h of spot.hands) {
     const label = classOf(h.hand);
     let agg = map.get(label);
     if (!agg) {
-      agg = { label, strategy: spot.actions.map(() => 0), ev: 0, equity: 0, count: 0, rep: h.hand };
+      agg = {
+        label,
+        strategy: spot.actions.map(() => 0),
+        ev: 0,
+        equity: 0,
+        evActions: hasEvActions ? spot.actions.map(() => 0) : [],
+        count: 0,
+        rep: h.hand,
+      };
       map.set(label, agg);
     }
     for (let a = 0; a < h.strategy.length; a++) agg.strategy[a] += h.strategy[a];
+    if (hasEvActions) {
+      for (let a = 0; a < spot.actions.length; a++) agg.evActions[a] += h.ev_actions![a];
+    }
     agg.ev += h.ev;
     agg.equity += h.equity;
     agg.count += 1;
@@ -54,6 +69,7 @@ function aggregate(spot: SpotContract): Map<string, ClassAgg> {
   // convert sums to averages
   for (const agg of map.values()) {
     agg.strategy = agg.strategy.map((s) => s / agg.count);
+    agg.evActions = agg.evActions.map((e) => e / agg.count);
     agg.ev /= agg.count;
     agg.equity /= agg.count;
   }
@@ -69,7 +85,7 @@ function cellLabel(i: number, j: number): string {
 export function renderGrid(
   spot: SpotContract,
   onSelect: (agg: ClassAgg) => void,
-): { el: HTMLElement; selectDefault: () => void } {
+): { el: HTMLElement; selectDefault: () => void; selectClass: (label: string) => boolean } {
   const colors = actionColors(spot.actions);
   const map = aggregate(spot);
 
@@ -133,5 +149,18 @@ export function renderGrid(
     if (first && firstAgg) select(first, firstAgg);
   };
 
-  return { el: grid, selectDefault };
+  /** Select a specific hand class (e.g. "AKs"); returns false if it has no combos here. */
+  const selectClass = (label: string): boolean => {
+    const agg = map.get(label);
+    if (!agg || agg.count === 0) return false;
+    const cells = [...grid.querySelectorAll<HTMLElement>(".cell")];
+    const cell = cells.find(
+      (c) => c.querySelector(".cell-label")?.textContent === label && !c.classList.contains("cell--empty"),
+    );
+    if (!cell) return false;
+    select(cell, agg);
+    return true;
+  };
+
+  return { el: grid, selectDefault, selectClass };
 }
