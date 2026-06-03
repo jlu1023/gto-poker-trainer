@@ -41,3 +41,19 @@ export interface IndexEntry {
 export interface IndexFile {
   spots: IndexEntry[];
 }
+
+// ---- Phase 3 solve server (SSE) ----
+
+/// `event: progress` payload: one convergence sample (every 10 solver iterations).
+export interface SolveProgressMsg {
+  iteration: number;
+  exploitability_pct_pot: number;
+}
+
+/// `event: complete` payload. `cached` = served from the matrix with no solve;
+/// `shrunk` = solved with a reduced flop tree after a RAM-ceiling breach.
+export interface SolveComplete {
+  cached: boolean;
+  shrunk: boolean;
+  spot: SpotContract;
+}

@@ -138,8 +138,24 @@ impl SpotSolution {
     }
 }
 
+/// A convergence sample emitted during a streaming solve (every 10 iterations).
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct SolveProgress {
+    pub iteration: u32,
+    pub exploitability_pct_pot: f32,
+}
+
 /// Build, solve, and read the root of a spot.
 pub fn solve_spot(spot: &Spot, cfg: &SolveConfig) -> Result<SpotSolution> {
+    solve_spot_streaming(spot, cfg, |_| {})
+}
+
+/// Like `solve_spot`, but invokes `on_progress` after each exploitability check (every 10
+/// iterations) so a caller can stream convergence (Phase 3 solve server).
+pub fn solve_spot_streaming<F>(spot: &Spot, cfg: &SolveConfig, mut on_progress: F) -> Result<SpotSolution>
+where
+    F: FnMut(SolveProgress),
+{
     let card_config = build_card_config(spot)?;
     let tree_config = build_tree_config(spot, cfg)?;
 
@@ -164,7 +180,7 @@ pub fn solve_spot(spot: &Spot, cfg: &SolveConfig) -> Result<SpotSolution> {
     let starting_pot = (spot.pot_bb * cfg.chip_per_bb as f64).round() as f32;
     let target = starting_pot * cfg.target_exploit_pct_pot as f32;
 
-    // manual solve loop so we can count iterations and stop early on convergence
+    // manual solve loop so we can count iterations, stop early on convergence, and stream progress
     let mut iterations = 0u32;
     let mut exploitability = f32::INFINITY;
     for i in 0..cfg.max_iterations {
@@ -172,6 +188,14 @@ pub fn solve_spot(spot: &Spot, cfg: &SolveConfig) -> Result<SpotSolution> {
         iterations = i + 1;
         if (i + 1) % 10 == 0 {
             exploitability = compute_exploitability(&game);
+            on_progress(SolveProgress {
+                iteration: iterations,
+                exploitability_pct_pot: if starting_pot > 0.0 {
+                    exploitability / starting_pot
+                } else {
+                    f32::INFINITY
+                },
+            });
             if exploitability <= target {
                 break;
             }

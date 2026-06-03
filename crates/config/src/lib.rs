@@ -86,7 +86,7 @@ pub struct StacksConfig {
     pub default_stack_bb: u32,
 }
 
-/// Output directories.
+/// Output directories and serving knobs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct IoConfig {
@@ -94,6 +94,8 @@ pub struct IoConfig {
     pub out_dir: String,
     /// Solved-spot cache (the matrix): serialized trees + manifest.json.
     pub matrix_dir: String,
+    /// Hard wall-clock cap on one on-demand solve (Phase 3 solve server).
+    pub solve_timeout_secs: u64,
 }
 
 /// How solved trees are persisted to the matrix.
@@ -182,7 +184,11 @@ impl Default for StacksConfig {
 
 impl Default for IoConfig {
     fn default() -> Self {
-        Self { out_dir: "out".to_string(), matrix_dir: "matrix".to_string() }
+        Self {
+            out_dir: "out".to_string(),
+            matrix_dir: "matrix".to_string(),
+            solve_timeout_secs: 300,
+        }
     }
 }
 

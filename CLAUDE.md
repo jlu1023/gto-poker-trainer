@@ -34,15 +34,19 @@ much for "can I verify it is right" as for "will I hit it often."
   deferred.
 
 ## Workspace
-Five crates under `crates/`:
+Six crates under `crates/`:
 - `config`  (`gto-config`)  - single source of truth for every tunable; serde schema + `default.toml`.
-- `engine`  (`gto-engine`)  - `Spot` model, spot-to-solver mapping, `solve_spot`, `query_node`.
-- `preflop` (`gto-preflop`) - HU preflop range provider (imports published charts; Phase 0 stub).
-- `validate`(`gto-validate`)- internal invariants + optional `rs_poker` / opensolver cross-check.
-- `store`   (`gto-store`)   - precompute-and-cache: serialize solved trees + manifest; `examples/smoke.rs`.
+- `engine`  (`gto-engine`)  - `Spot` model, spot-to-solver mapping, `solve_spot` /
+  `solve_spot_streaming`, `query_node`.
+- `preflop` (`gto-preflop`) - HU preflop range provider (authored `data/hu_ranges.toml`).
+- `validate`(`gto-validate`)- internal invariants + `rs_poker` equity cross-check.
+- `store`   (`gto-store`)   - precompute-and-cache: serialize solved trees + manifest; the shared
+  viz contract (`gto_store::viz`); examples `smoke` / `build_matrix` / `export_viz`.
+- `server`  (`gto-server`)  - Phase 3 localhost solve-on-demand binary: POST a flop, SSE streams
+  convergence, the matrix is the cache.
 
 Dependency graph (DAG): `config` is the base; `engine` and `preflop` depend on `config`; `validate`
-and `store` depend on `engine` + `config`. The smoke entry lives in `store/examples/smoke.rs`.
+and `store` depend on `engine` + `config`; `server` depends on all five.
 
 ## Spot model (the highest-risk piece)
 postflop-solver solves a subgame from a chosen street. Preflop / earlier-street history is NOT passed
@@ -66,6 +70,13 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   Solves the curated benchmark (`benchmark/spots.toml`) with the `srp-v1` tree (`phase1.toml`), asserts
   invariants, stores each spot, and runs the rs_poker equity cross-check. Preflop ranges are authored
   in-repo (`crates/preflop/data/hu_ranges.toml`); the curated stored set IS the validation benchmark.
+- Viz export (Phase 2, from repo root): `cargo run --release -p gto-store --example export_viz`
+  writes `viz/public/data/*.json`; then `npm run dev` (or `build`) inside `viz/`.
+- Solve server (Phase 3, from repo root): `cargo run --release -p gto-server`
+  Listens on `127.0.0.1:7474` (50bb SRP only, tree `srp-v1`, loads `phase1.toml`). The viz solve
+  panel POSTs to it; fresh solves stream SSE progress, pass invariants, and cache to `matrix/`.
+- Gates: `verify_viz.py` (Phase 2) and `verify_solve.py` (Phase 3), both run with the Python 3.12
+  interpreter that has Playwright (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`).
 
 ## Writing conventions
 - No em dashes in any prose. Use hyphens, colons, or parentheses.

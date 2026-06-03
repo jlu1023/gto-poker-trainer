@@ -28,6 +28,11 @@ bincode_derive = "=2.0.0-rc.3"
 # the `arena` feature, which uses a nightly-only feature (assert_matches) and breaks on stable. Core
 # hand evaluation (what we need for the equity cross-check) is not feature-gated.
 rs_poker = { version = "4", default-features = false }
+# Phase 3 solve server (crates/server): localhost HTTP + SSE over the engine.
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors"] }
+futures = "0.3"
 
 # internal members
 gto-config = { path = "crates/config" }

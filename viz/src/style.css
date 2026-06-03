@@ -112,6 +112,117 @@ body {
   outline-offset: 1px;
 }
 
+/* ---------- solve panel (Phase 3) ---------- */
+.solve-wrap {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 22px;
+  border-left: 1px solid var(--border);
+}
+.solve-wrap label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+#flop {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  width: 110px;
+}
+#flop:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+#flop::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.14em;
+}
+#solveBtn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #14110a;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: filter 0.1s ease;
+}
+#solveBtn:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+#solveBtn:disabled {
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: not-allowed;
+  border: 1px solid var(--border);
+}
+
+/* the convergence strip under the topbar */
+.solve-status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 28px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(227, 167, 62, 0.04);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.solve-status[data-state="idle"] {
+  display: none;
+}
+.solve-status[data-state="invalid"] .ss-track,
+.solve-status[data-state="error"] .ss-track,
+.solve-status[data-state="cached"] .ss-track {
+  display: none;
+}
+.solve-status[data-state="invalid"] .ss-label,
+.solve-status[data-state="error"] .ss-label {
+  color: var(--accent-2);
+}
+.solve-status[data-state="done"] .ss-label,
+.solve-status[data-state="cached"] .ss-label {
+  color: #6fbf8f;
+}
+.ss-label {
+  color: var(--text);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.ss-track {
+  flex: 1;
+  max-width: 420px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ss-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width 0.25s ease;
+}
+.ss-value {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .meta {
   margin-left: auto;
   display: flex;

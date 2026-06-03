@@ -42,6 +42,8 @@ rake_cap = 0.0
 [io]
 out_dir = "out"
 matrix_dir = "matrix"
+# Hard wall-clock cap on one on-demand solve (Phase 3 solve server).
+solve_timeout_secs = 300
 
 [store]
 use_zstd = true

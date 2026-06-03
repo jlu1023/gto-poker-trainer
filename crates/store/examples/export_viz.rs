@@ -1,52 +1,16 @@
 //! Export the curated matrix to JSON the Phase 2 viz consumes (read-only, no solving).
 //!
-//! Reads the manifest, loads each stored spot via gto-store, reshapes the root node's
-//! `strategy[hand + action*n]` into clean per-hand arrays, and writes one JSON per spot plus an index
-//! into `viz/public/data/`. Run from the repo root:
+//! Reads the manifest, loads each stored spot via gto-store, builds the shared viz contract
+//! (`gto_store::viz`), and writes one JSON per spot plus an index into `viz/public/data/`.
+//! Run from the repo root:
 //!   cargo run --release -p gto-store --example export_viz
 
 use anyhow::{Context, Result};
 use gto_config::Config;
+use gto_store::viz::build_contract;
 use gto_store::{load_manifest, load_solution};
 use serde::Serialize;
 use std::path::Path;
-
-#[derive(Serialize)]
-struct Seat {
-    position: &'static str,
-    seat: &'static str,
-}
-
-#[derive(Serialize)]
-struct HeroSeat {
-    player: usize,
-    position: &'static str,
-    seat: &'static str,
-}
-
-#[derive(Serialize)]
-struct HandEntry {
-    hand: String,
-    strategy: Vec<f32>,
-    ev: f32,
-    equity: f32,
-}
-
-#[derive(Serialize)]
-struct SpotContract {
-    key: String,
-    board: Vec<String>,
-    street: String,
-    stack_depth_bb: u32,
-    pot_bb: f64,
-    eff_stack_bb: f64,
-    exploitability_pct_pot: f32,
-    iterations: u32,
-    hero: HeroSeat,
-    villain: Seat,
-    actions: Vec<String>,
-    hands: Vec<HandEntry>,
-}
 
 #[derive(Serialize)]
 struct IndexEntry {
@@ -104,59 +68,4 @@ fn main() -> Result<()> {
 
     println!("\nexported {exported} spot(s) + index -> {}", out_dir.display());
     Ok(())
-}
-
-fn build_contract(key: &str, solution: &gto_engine::SpotSolution) -> SpotContract {
-    let root = &solution.root;
-    let n = root.hands.len();
-    let num_actions = root.actions.len();
-
-    let hands = (0..n)
-        .map(|i| HandEntry {
-            hand: root.hands[i].clone(),
-            strategy: (0..num_actions).map(|a| root.strategy[i + a * n]).collect(),
-            ev: root.ev.get(i).copied().unwrap_or(0.0),
-            equity: root.equity.get(i).copied().unwrap_or(0.0),
-        })
-        .collect();
-
-    let spot = &solution.spot;
-    let mut board: Vec<String> = spot.board.flop.to_vec();
-    if let Some(t) = &spot.board.turn {
-        board.push(t.clone());
-    }
-    if let Some(r) = &spot.board.river {
-        board.push(r.clone());
-    }
-
-    let oop = root.player == 0;
-    SpotContract {
-        key: key.to_string(),
-        board,
-        street: street_label(spot.initial_street).to_string(),
-        stack_depth_bb: spot.stack_depth_bb,
-        pot_bb: spot.pot_bb,
-        eff_stack_bb: spot.effective_stack_bb,
-        exploitability_pct_pot: solution.exploitability_pct_pot,
-        iterations: solution.iterations_run,
-        hero: HeroSeat {
-            player: root.player,
-            position: if oop { "OOP" } else { "IP" },
-            seat: if oop { "BB" } else { "BTN" },
-        },
-        villain: Seat {
-            position: if oop { "IP" } else { "OOP" },
-            seat: if oop { "BTN" } else { "BB" },
-        },
-        actions: root.actions.clone(),
-        hands,
-    }
-}
-
-fn street_label(street: gto_engine::Street) -> &'static str {
-    match street {
-        gto_engine::Street::Flop => "flop",
-        gto_engine::Street::Turn => "turn",
-        gto_engine::Street::River => "river",
-    }
 }

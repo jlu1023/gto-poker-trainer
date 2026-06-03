@@ -12,6 +12,8 @@
 //! deferred migration. Out-of-set spots get exact-key lookup only in Phase 0 (nearest-node mapping
 //! and solve-then-cache are deferred).
 
+pub mod viz;
+
 use anyhow::{anyhow, Context, Result};
 use gto_config::{BetTreeConfig, Config};
 use gto_engine::{read_root, Spot, SpotSolution, SpotSolutionSummary, Street};

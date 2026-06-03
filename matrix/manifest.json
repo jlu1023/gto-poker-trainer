@@ -71,6 +71,16 @@
       "exploitability_pct_pot": 0.0044593513,
       "iterations": 40
     },
+    "50bb_8d6s3c_flop_srp-v1": {
+      "file": "50bb_8d6s3c_flop_srp-v1.bin.zst",
+      "summary": "50bb_8d6s3c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "8d6s3c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.004095156,
+      "iterations": 90
+    },
     "50bb_AcKhQd_flop_srp-v1": {
       "file": "50bb_AcKhQd_flop_srp-v1.bin.zst",
       "summary": "50bb_AcKhQd_flop_srp-v1.summary.json",

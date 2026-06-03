@@ -139,6 +139,47 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   bincode in-browser is wasteful; and a read-only viz needs no engine in the browser at all. The native
   JSON-export + static front-end path avoids all of this.
 
+## Phase 3 decisions
+
+- **D27. Server framework = axum 0.8 + tokio 1** (new crate `gto-server`). `tower-http` CORS
+  middleware (permissive; localhost-only, no credentials). Binary target run from the repo root:
+  `cargo run --release -p gto-server`, binds `127.0.0.1:7474`. Fails fast if `phase1.toml` is
+  missing (a defaulted config would silently solve under the wrong tree id and split the cache).
+- **D28. Progress = SSE over a fetch stream.** Events: `progress` (iteration + exploitability
+  every 10 solver iterations), `complete` ({cached, shrunk, spot}), `error` ({message}); exactly
+  one terminal event per request. REFINED at build time: the browser `EventSource` API cannot
+  POST and its auto-reconnect would re-fire solves, so the client parses `text/event-stream` off
+  a `fetch` body (~40-line parser in `viz/src/solve.ts`). Polling rejected as planned.
+- **D29. Bet tree for 50bb = `srp-v1`** (same as Phase 1 50bb spots). No `srp-50-v1` defined;
+  sizing is pot-fraction-based and scales to any stack depth correctly. Verified: a submitted
+  `AcKhQd` cache-hits the Phase 1 batch entry with no re-solve.
+- **D30. Concurrency = single-solve-at-a-time.** REFINED: `Arc<tokio::sync::Semaphore>` with one
+  permit instead of `Mutex<SolveStatus>`; the owned permit moves into the blocking solve thread,
+  so the slot releases exactly when the CPU work ends (RAII, panic-safe, and a timed-out orphan
+  keeps holding the slot until it finishes and caches). Second submit while running gets an
+  immediate `error` event. Cache hits never touch the slot.
+- **D31. Boards are canonicalized server-side** (rank desc, suit desc s>h>d>c, matching the
+  Phase 1 benchmark keys) before key building, so ANY typing order/case of the same flop maps to
+  one spot key (cache correctness). The engine's solve geometry is order-independent; only the
+  key needed pinning. The shrunk-tree variant key (`...-shrunk`) is also checked on lookup so a
+  RAM-shrunk board still cache-hits.
+
+## Phase 3 gate (passed 2026-06-03)
+
+- `cargo check --workspace --all-targets` clean; `npm run build` clean; server + canonicalization
+  unit tests green.
+- Fresh 50bb flop (8d6s3c): real solve in 17.1 s, 9 streamed convergence samples, grid rendered,
+  stored exploitability 0.410% pot (below the 0.5% target), invariants passed server-side.
+- UI AA cell reconciles with `matrix/<key>.summary.json` on disk: equity diff 0.025%, all three
+  action bars exact, 6 combos (weight-correct aggregation).
+- Same flop re-submitted: served from cache in 0.97 s with 0 progress events; server log shows
+  exactly one solve across both submits. Phase 1 board `AcKhQd` also cache-hits (key interop).
+- Illegal board (`KsKs2c`): inline 'duplicate card' error, submit disabled, no request fired.
+  Direct API: 2-card board and duplicate card return SSE `error` events (server-side validation
+  is independent of the client); malformed JSON returns HTTP 400.
+- Zero console/page errors across the whole Playwright session; Phase 2 `verify_viz.py` still
+  passes (no regression).
+
 ## Phase 2 gate (passed 2026-06-03)
 
 - `cargo check --workspace --all-targets` clean; `npm run build` clean.
