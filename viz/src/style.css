@@ -91,34 +91,6 @@ body {
   transform: translateY(-1px);
 }
 
-.selector-wrap {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.selector-wrap label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--muted);
-}
-#spot {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  min-width: 220px;
-}
-#spot:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
 /* ---------- the unified solve control (Phase 3 solve + Phase 4 train entry) ----------
    One header cluster: depth + board (+ hand in train mode) + the action button. The depth
    select is shared; .sw-explore / .sw-train fields swap with the mode. */
@@ -301,9 +273,8 @@ body.mode-train .solve-wrap .sw-train {
   color: #14110a;
   font-weight: 700;
 }
-/* train mode hides the stored-spot selector and the explore convergence strip; the solve
-   control itself stays (its fields swap to the train set) */
-body.mode-train .selector-wrap,
+/* train mode hides the explore convergence strip; the solve control itself stays (its
+   fields swap to the train set) */
 body.mode-train .solve-status {
   display: none;
 }
@@ -517,7 +488,6 @@ body.mode-train .solve-status {
 
 /* ---------- review mode (Phase 5) ---------- */
 body.mode-review .stage,
-body.mode-review .selector-wrap,
 body.mode-review .solve-wrap,
 body.mode-review .solve-status {
   display: none;

@@ -189,8 +189,7 @@ def step_e2e(fresh_board):
                         print(f"  FAIL  could not reach {APP_URL}")
                         return False
                     time.sleep(0.5)
-            page.wait_for_function(
-                "() => document.querySelectorAll('#spot option').length > 0", timeout=15_000)
+            page.wait_for_selector("#solveBtn", timeout=15_000)
 
             key = f"50bb_{fresh_board}_flop_srp-v1"
 
@@ -214,12 +213,14 @@ def step_e2e(fresh_board):
             else:
                 print("  PASS  board=3 hero=2 cells=169 rendered from the live solve")
 
-            in_selector = page.eval_on_selector_all(
-                "#spot option", "os => os.map(o => o.value)")
-            if key in in_selector:
-                print("  PASS  solved spot added to the selector")
+            # the meta chip row is the post-removal "the UI registered this spot" signal
+            # (text_content, not visibility: .meta is display:none under 1024px widths)
+            spaced = " ".join(fresh_board[i:i + 2] for i in (0, 2, 4))
+            meta_text = page.text_content("#meta") or ""
+            if spaced in meta_text and "50bb" in meta_text:
+                print(f"  PASS  meta chips show the solved spot ({spaced} · 50bb)")
             else:
-                print("  FAIL  solved spot missing from the selector")
+                print(f"  FAIL  meta chips missing solved spot: '{meta_text.strip()}'")
                 ok = False
 
             # stored result on disk + converged below target

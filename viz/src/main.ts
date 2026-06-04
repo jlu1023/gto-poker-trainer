@@ -1,5 +1,5 @@
 import "./style.css";
-import type { IndexFile, SolveComplete, SpotContract } from "./types";
+import type { SolveComplete, SpotContract } from "./types";
 import type { ClassAgg } from "./grid";
 import { renderTable } from "./table";
 import { renderGrid, actionColors } from "./grid";
@@ -9,12 +9,6 @@ import { initReview } from "./review";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("missing #app");
-
-async function fetchJson<T>(file: string): Promise<T> {
-  const res = await fetch(`data/${file}`);
-  if (!res.ok) throw new Error(`${file}: ${res.status}`);
-  return (await res.json()) as T;
-}
 
 function humanAction(label: string): string {
   const m = label.match(/^([A-Za-z]+)\((\d+)\)$/);
@@ -28,8 +22,8 @@ function humanAction(label: string): string {
 // exist once per mode (.sw-explore / .sw-train, CSS-swapped) because the two flows keep
 // deliberately separate state machines: the explore path disables its input/button around a
 // live solve, while the train path (commit-then-reveal, D35) must never couple to that. The
-// ids are pinned by the gate verifiers (verify_solve: #flop/#solveBtn; verify_trainer:
-// #tDepth/#tBoard/#tHand/#tSetup) - do not rename or merge them.
+// ids are pinned by the gate verifiers (verify_viz + verify_solve: #tDepth/#flop/#solveBtn;
+// verify_trainer: #tDepth/#tBoard/#tHand/#tSetup) - do not rename or merge them.
 app.innerHTML = `
   <header class="topbar">
     <div class="brand"><span class="brand-mark">◈</span>GTO&nbsp;<em>Lab</em></div>
@@ -37,10 +31,6 @@ app.innerHTML = `
       <button id="modeExplore" class="mode-btn mode-btn--active" type="button">explore</button>
       <button id="modeTrain" class="mode-btn" type="button">train</button>
       <button id="modeReview" class="mode-btn" type="button">review</button>
-    </div>
-    <div class="selector-wrap">
-      <label for="spot">spot</label>
-      <select id="spot" aria-label="stored spot"></select>
     </div>
     <div class="solve-wrap">
       <label for="tDepth"><span class="sw-explore">solve · srp</span><span class="sw-train">train · srp</span></label>
@@ -76,7 +66,6 @@ app.innerHTML = `
   </main>
 `;
 
-const selector = app.querySelector<HTMLSelectElement>("#spot")!;
 const meta = app.querySelector<HTMLDivElement>("#meta")!;
 const depthSel = app.querySelector<HTMLSelectElement>("#tDepth")!;
 const flopIn = app.querySelector<HTMLInputElement>("#flop")!;
@@ -86,13 +75,19 @@ const gridHost = app.querySelector<HTMLElement>("#gridHost")!;
 const detailHost = app.querySelector<HTMLElement>("#detail")!;
 const legendHost = app.querySelector<HTMLElement>("#legend")!;
 
-// spots solved live this session (REAL solver output from the server, never mocked); lets the
-// selector flip back to an on-demand spot without a static data/<key>.json file
-const sessionSpots = new Map<string, SpotContract>();
+// the last spot rendered from a live solve or trainer reveal (REAL solver output from the
+// server, never mocked); re-entering explore restores it. Recall of any other cached board
+// is re-typing it: the solve path is cache-first, so presets load instantly.
+let lastSpot: SpotContract | null = null;
 
 const TRAINER_PROMPT =
   "Set up a spot in the top bar (depth, board, your hand) and commit to an action. " +
   "The solver's answer reveals only after you commit.";
+
+const EXPLORE_IDLE_TITLE = "No spot on stage";
+const EXPLORE_IDLE_BODY =
+  "Type a flop in the top bar, pick a depth, and Solve. " +
+  "Cached boards load instantly; new boards stream a live solve.";
 
 function showStageMessage(title: string, body: string) {
   tableHost.innerHTML = `<div class="empty"><h2>${title}</h2><p>${body}</p></div>`;
@@ -143,9 +138,8 @@ function renderDetail(spot: SpotContract, colors: string[], agg: ClassAgg) {
     </div>`;
 }
 
-/** Render a spot (from a static file, the session cache, or a live solve). When
- *  `selectClassLabel` is given (trainer reveal), that hand class is selected instead of the
- *  default first in-range cell. */
+/** Render a spot (from a live solve or a trainer reveal). When `selectClassLabel` is given
+ *  (trainer reveal), that hand class is selected instead of the default first in-range cell. */
 function renderSpot(spot: SpotContract, selectClassLabel?: string) {
   const colors = actionColors(spot.actions);
   renderMeta(spot);
@@ -167,33 +161,10 @@ function renderSpot(spot: SpotContract, selectClassLabel?: string) {
   }
 }
 
-async function loadSpot(key: string) {
-  const live = sessionSpots.get(key);
-  if (live) {
-    renderSpot(live);
-    return;
-  }
-  let spot: SpotContract;
-  try {
-    spot = await fetchJson<SpotContract>(`${key}.json`);
-  } catch {
-    showStageMessage("No solved data for this spot", `Run the matrix build and exporter to populate it: cargo run --release -p gto-store --example build_matrix, then export_viz.`);
-    return;
-  }
-  renderSpot(spot);
-}
-
-/** A live solve (fresh or cached) finished: remember it, list it, render it. */
+/** A live solve (fresh or cached) finished: remember it, render it. */
 function onSolved(payload: SolveComplete, selectClassLabel?: string) {
   const spot = payload.spot;
-  sessionSpots.set(spot.key, spot);
-  if (![...selector.options].some((o) => o.value === spot.key)) {
-    const opt = document.createElement("option");
-    opt.value = spot.key;
-    opt.textContent = `${spot.board.join("")} · ${spot.stack_depth_bb}bb · live`;
-    selector.appendChild(opt);
-  }
-  selector.value = spot.key;
+  lastSpot = spot;
   renderSpot(spot, selectClassLabel);
 }
 
@@ -233,8 +204,12 @@ function initModeToggle() {
       // entering (or re-clicking) train mode blanks the stage: nothing solver-derived
       // pre-commit (D35)
       showStageMessage("Trainer", TRAINER_PROMPT);
-    } else if (mode === "explore" && selector.value) {
-      void loadSpot(selector.value);
+    } else if (mode === "explore") {
+      if (lastSpot) {
+        renderSpot(lastSpot);
+      } else {
+        showStageMessage(EXPLORE_IDLE_TITLE, EXPLORE_IDLE_BODY);
+      }
     }
   };
 
@@ -243,7 +218,7 @@ function initModeToggle() {
   buttons.review.addEventListener("click", () => setMode("review"));
 }
 
-async function main() {
+function main() {
   initSolvePanel(
     {
       input: flopIn,
@@ -270,24 +245,9 @@ async function main() {
     blankStage: () => showStageMessage("Trainer", TRAINER_PROMPT),
   });
 
-  let index: IndexFile;
-  try {
-    index = await fetchJson<IndexFile>("index.json");
-  } catch {
-    showStageMessage("Matrix not found", "Could not load data/index.json. Build the matrix and run the export_viz exporter first.");
-    return;
-  }
-  if (index.spots.length === 0) {
-    showStageMessage("Matrix is empty", "No stored spots in the manifest.");
-    return;
-  }
-
-  selector.innerHTML = index.spots
-    .map((s) => `<option value="${s.key}">${s.board.join("")} · ${s.stack_depth_bb}bb</option>`)
-    .join("");
-  selector.addEventListener("change", () => loadSpot(selector.value));
-
-  await loadSpot(index.spots[0].key);
+  // nothing on stage until the operator solves something; the solve path is cache-first,
+  // so any stored board is one Solve away
+  showStageMessage(EXPLORE_IDLE_TITLE, EXPLORE_IDLE_BODY);
 }
 
-void main();
+main();

@@ -381,8 +381,7 @@ def main():
                         if attempt == 11:
                             raise
                         time.sleep(0.5)
-                page.wait_for_function(
-                    "() => document.querySelectorAll('#spot option').length > 0", timeout=15000)
+                page.wait_for_selector("#modeReview", timeout=15000)
                 page.click("#modeReview")
                 page.fill("#rvText", ps_text)
                 page.click("#rvAnalyze")

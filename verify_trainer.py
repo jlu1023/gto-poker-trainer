@@ -269,8 +269,7 @@ def step_ui():
                         print(f"  FAIL  could not reach {APP_URL}")
                         return False
                     time.sleep(0.5)
-            page.wait_for_function(
-                "() => document.querySelectorAll('#spot option').length > 0", timeout=15_000)
+            page.wait_for_selector("#solveBtn", timeout=15_000)
 
             def n_solver_fetches():
                 return sum(1 for u in requests_log
@@ -360,11 +359,14 @@ def step_ui():
                 print(f"  FAIL  100bb round: gate={r2['gate_ok']} verdict={r2['verdict']} "
                       f"(want {exp2['verdict']}) cells={r2['grid_cells']}")
                 ok = False
-            sel_value = page.eval_on_selector("#spot", "s => s.value")
-            if sel_value == f"100bb_{CACHED_100}_flop_srp-v1":
-                print(f"  PASS  depth flowed into the key: {sel_value}")
+            # depth-flowed proof, post-dropdown: the graded history row echoes the grade
+            # response's depth, and the revealed spot's meta chips carry the key's depth
+            th_spots = page.eval_on_selector_all(".th-spot", "els => els.map(e => e.textContent)")
+            meta_text = page.text_content("#meta") or ""
+            if th_spots and th_spots[-1] == f"100bb {CACHED_100}" and "100bb" in meta_text:
+                print(f"  PASS  depth flowed into the key: history row '{th_spots[-1]}', meta 100bb")
             else:
-                print(f"  FAIL  selector key {sel_value} lacks 100bb depth")
+                print(f"  FAIL  depth missing: history rows {th_spots}, meta '{meta_text.strip()}'")
                 ok = False
 
             # ---- round 3: FRESH board, commit before any solve exists anywhere ----

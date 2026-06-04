@@ -2,12 +2,22 @@
 """
 Phase 2b gate verification for GTO Lab viz.
 Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.exe verify_viz.py
+
+Since the SPOT preset dropdown was removed, the solve cluster (depth select + board input +
+Solve) is the single spot entry, so this gate drives it. Preconditions: a built
+target/release/gto-server.exe and a populated matrix/ (the srp-v1 fixtures listed in
+viz/public/data/index.json must be cached). Each fixture load MUST terminate "cached" with
+zero progress events: the gate now also guards that presets never silently re-solve.
+Rendering is still reconciled against the static exports in viz/public/data/*.json.
+The smoke-v0 spot is out of gate scope: the cluster only forms srp-v1 keys, so a smoke-v0
+tree entry is unreachable from the UI (it remains in the matrix).
 """
 
 import json
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 PORT = 5247
@@ -15,6 +25,9 @@ REPO = Path(__file__).parent
 VIZ_DIR = REPO / "viz"
 DATA_DIR = VIZ_DIR / "public" / "data"
 URL = f"http://localhost:{PORT}/"
+SERVER_URL = "http://127.0.0.1:7474"
+SERVER_EXE = REPO / "target" / "release" / "gto-server.exe"
+SERVER_LOG = REPO / "out" / "verify_viz_server.log"
 
 
 def step_cargo_check():
@@ -46,10 +59,57 @@ def step_npm_build():
     return True
 
 
+def wait_health(timeout_s=30):
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"{SERVER_URL}/api/health", timeout=2) as r:
+                if r.status == 200:
+                    return True
+        except Exception:
+            time.sleep(0.4)
+    return False
+
+
+def load_fixture(page, board, depth, timeout_ms=15_000):
+    """Load a cached spot through the solve cluster (the single spot entry).
+    Returns (state, progress_count). The terminal wait also requires the board in the
+    strip label so a stale terminal state from the PREVIOUS spot cannot satisfy it."""
+    page.select_option("#tDepth", str(depth))
+    page.fill("#flop", "")
+    page.fill("#flop", board)
+    page.click("#solveBtn")
+    page.wait_for_function(
+        f"""() => {{
+            const s = document.querySelector('#solveStatus');
+            const label = document.querySelector('#ssLabel').textContent;
+            return ['done','cached','error'].includes(s.dataset.state) && label.includes('{board}');
+        }}""",
+        timeout=timeout_ms,
+    )
+    state = page.eval_on_selector("#solveStatus", "el => el.dataset.state")
+    progress = int(page.eval_on_selector("#solveStatus", "el => el.dataset.progressCount"))
+    return state, progress
+
+
 def step_playwright():
-    print("\n=== 3. Playwright rendering checks ===")
+    print("\n=== 3. Playwright rendering checks (cluster-driven, cache hits only) ===")
     from playwright.sync_api import sync_playwright
 
+    # the fixture set: srp-v1 entries of the static export index (the smoke-v0 tree is
+    # unreachable through the cluster and is out of gate scope)
+    index = json.loads((DATA_DIR / "index.json").read_text())
+    fixtures = [s for s in index["spots"] if s["key"].endswith("_srp-v1")]
+    if not fixtures:
+        print("  FAIL  no srp-v1 fixtures in data/index.json")
+        return False
+
+    SERVER_LOG.parent.mkdir(exist_ok=True)
+    server_log = open(SERVER_LOG, "w", encoding="utf-8")
+    server = subprocess.Popen(
+        [str(SERVER_EXE)], cwd=str(REPO),
+        stdout=server_log, stderr=subprocess.STDOUT, text=True,
+    )
     print(f"  Starting Vite dev server on port {PORT} ...")
     srv = subprocess.Popen(
         f"npm.cmd run dev -- --port {PORT} --strictPort",
@@ -59,6 +119,9 @@ def step_playwright():
 
     try:
         time.sleep(3)  # Vite is fast; 3 s is enough
+        if not wait_health():
+            print("  FAIL  solve server never became healthy")
+            return False
 
         ok = True
         with sync_playwright() as pw:
@@ -81,27 +144,28 @@ def step_playwright():
                         return False
                     time.sleep(0.5)
 
-            # wait for selector options to be populated (options inside <select> are not "visible")
-            try:
-                page.wait_for_function(
-                    "() => document.querySelectorAll('#spot option').length > 0",
-                    timeout=15000
-                )
-            except Exception:
-                print("  FAIL  #spot selector never populated")
-                return False
-
-            spot_keys = page.eval_on_selector_all(
-                "#spot option", "els => els.map(o => o.value)"
-            )
-            print(f"  {len(spot_keys)} spots in selector: {spot_keys}")
+            page.wait_for_selector("#solveBtn", timeout=15000)
+            print(f"  {len(fixtures)} srp-v1 fixtures from data/index.json")
 
             # ---- per-spot rendering checks ----
-            for key in spot_keys:
+            for entry in fixtures:
+                key = entry["key"]
+                board = "".join(entry["board"])
+                depth = entry["stack_depth_bb"]
                 console_errors.clear()
                 page_errors.clear()
 
-                page.select_option("#spot", key)
+                try:
+                    state, progress = load_fixture(page, board, depth)
+                except Exception:
+                    print(f"  FAIL  {key}: no terminal solve state within budget")
+                    ok = False
+                    continue
+                if state != "cached" or progress != 0:
+                    print(f"  FAIL  {key}: expected instant cache hit, got state={state} "
+                          f"progress={progress} (fixture re-solved or missing from matrix/)")
+                    ok = False
+                    continue
 
                 # wait for the full 13x13 grid (169 cells)
                 try:
@@ -128,7 +192,7 @@ def step_playwright():
                 spot_ok = (board_n == 3) and (hero_n == 2) and (bar_n > 0) and bool(detail) and not all_errors
                 tag = "PASS" if spot_ok else "FAIL"
                 print(
-                    f"  {tag}  {key}  "
+                    f"  {tag}  {key}  cached/0-progress  "
                     f"board={board_n}/3  hero={hero_n}/2  bars={bar_n}  "
                     f"detail={'ok' if detail else 'empty'}  "
                     f"errors={len(all_errors)}"
@@ -148,7 +212,10 @@ def step_playwright():
 
             actions = raw["actions"]
 
-            page.select_option("#spot", ks_key)
+            state, progress = load_fixture(page, "Ks7h2c", 100)
+            if state != "cached":
+                print(f"  FAIL  reconciliation load not cached (state={state})")
+                ok = False
             page.wait_for_function(
                 "() => document.querySelectorAll('.cell').length === 169",
                 timeout=10000
@@ -230,11 +297,13 @@ def step_playwright():
         return ok
 
     finally:
-        srv.terminate()
-        try:
-            srv.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            srv.kill()
+        for proc in (server, srv):
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        server_log.close()
 
 
 def main():
