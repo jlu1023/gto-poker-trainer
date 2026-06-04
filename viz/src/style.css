@@ -30,6 +30,12 @@
   padding: 0;
 }
 
+/* the hidden attribute always wins: author display rules (.t-row, .t-grade, .rv-solve,
+   .trainer, .review are all flex) must never resurrect an element JS marked hidden */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -55,8 +61,9 @@ body {
 /* ---------- topbar ---------- */
 .topbar {
   display: flex;
+  flex-wrap: wrap; /* at narrow widths the solve control drops to a second line, never clips */
   align-items: center;
-  gap: 28px;
+  gap: 10px 28px;
   padding: 16px 28px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
@@ -112,7 +119,9 @@ body {
   outline-offset: 1px;
 }
 
-/* ---------- solve panel (Phase 3) ---------- */
+/* ---------- the unified solve control (Phase 3 solve + Phase 4 train entry) ----------
+   One header cluster: depth + board (+ hand in train mode) + the action button. The depth
+   select is shared; .sw-explore / .sw-train fields swap with the mode. */
 .solve-wrap {
   display: flex;
   align-items: center;
@@ -128,7 +137,21 @@ body {
   color: var(--muted);
   white-space: nowrap;
 }
-#flop {
+.solve-wrap select {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.solve-wrap select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.solve-wrap input {
   font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.14em;
@@ -139,15 +162,18 @@ body {
   padding: 8px 12px;
   width: 110px;
 }
-#flop:focus {
+#tHand {
+  width: 92px;
+}
+.solve-wrap input:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-#flop::placeholder {
+.solve-wrap input::placeholder {
   color: rgba(255, 255, 255, 0.25);
   letter-spacing: 0.14em;
 }
-#solveBtn {
+.solve-wrap button {
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 700;
@@ -161,14 +187,29 @@ body {
   cursor: pointer;
   transition: filter 0.1s ease;
 }
-#solveBtn:hover:not(:disabled) {
+.solve-wrap button:hover:not(:disabled) {
   filter: brightness(1.12);
 }
-#solveBtn:disabled {
+.solve-wrap button:disabled {
   background: var(--panel-2);
   color: var(--muted);
-  cursor: not-allowed;
   border: 1px solid var(--border);
+}
+#solveBtn:disabled {
+  cursor: not-allowed; /* disabled = invalid board */
+}
+#tSetup:disabled {
+  cursor: wait; /* disabled = setup request in flight */
+}
+/* mode-dependent fields of the one control */
+.solve-wrap .sw-train {
+  display: none;
+}
+body.mode-train .solve-wrap .sw-explore {
+  display: none;
+}
+body.mode-train .solve-wrap .sw-train {
+  display: inline-block;
 }
 
 /* the convergence strip under the topbar */
@@ -260,14 +301,16 @@ body {
   color: #14110a;
   font-weight: 700;
 }
-/* train mode hides the explore controls */
+/* train mode hides the stored-spot selector and the explore convergence strip; the solve
+   control itself stays (its fields swap to the train set) */
 body.mode-train .selector-wrap,
-body.mode-train .solve-wrap,
 body.mode-train .solve-status {
   display: none;
 }
 
-/* ---------- trainer strip (Phase 4) ---------- */
+/* ---------- trainer strip (Phase 4) ----------
+   Entry fields live in the topbar's solve control; this strip carries the flow content
+   (error, commit question, progress, grade, history) and collapses when all are hidden. */
 .trainer {
   border-bottom: 1px solid var(--border);
   background: rgba(91, 141, 239, 0.04);
@@ -278,54 +321,14 @@ body.mode-train .solve-status {
   font-family: var(--font-mono);
   font-size: 12px;
 }
+.trainer:not(:has(> :not([hidden]))) {
+  display: none;
+}
 .t-row {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-.trainer label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--muted);
-}
-.trainer select,
-.trainer input {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text);
-  background: var(--panel-2);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  padding: 7px 11px;
-}
-.trainer input {
-  width: 100px;
-  letter-spacing: 0.12em;
-}
-.trainer input:focus,
-.trainer select:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-#tSetup {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #14110a;
-  background: var(--accent);
-  border: none;
-  border-radius: 8px;
-  padding: 8px 15px;
-  cursor: pointer;
-}
-#tSetup:disabled {
-  background: var(--panel-2);
-  color: var(--muted);
-  cursor: wait;
 }
 .t-err {
   color: var(--accent-2);

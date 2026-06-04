@@ -23,6 +23,13 @@ function humanAction(label: string): string {
   return `${m[1]} ${m[2]}`;
 }
 
+// The topbar hosts the SINGLE solve control: depth + board (+ hand in train mode) + one
+// action button. The depth select is shared by both modes; the board input and the button
+// exist once per mode (.sw-explore / .sw-train, CSS-swapped) because the two flows keep
+// deliberately separate state machines: the explore path disables its input/button around a
+// live solve, while the train path (commit-then-reveal, D35) must never couple to that. The
+// ids are pinned by the gate verifiers (verify_solve: #flop/#solveBtn; verify_trainer:
+// #tDepth/#tBoard/#tHand/#tSetup) - do not rename or merge them.
 app.innerHTML = `
   <header class="topbar">
     <div class="brand"><span class="brand-mark">◈</span>GTO&nbsp;<em>Lab</em></div>
@@ -36,10 +43,19 @@ app.innerHTML = `
       <select id="spot" aria-label="stored spot"></select>
     </div>
     <div class="solve-wrap">
-      <label for="flop">solve · 50bb srp</label>
-      <input id="flop" type="text" placeholder="Ks7h2c" maxlength="11"
+      <label for="tDepth"><span class="sw-explore">solve · srp</span><span class="sw-train">train · srp</span></label>
+      <select id="tDepth" aria-label="stack depth">
+        <option value="50">50bb</option>
+        <option value="100">100bb</option>
+      </select>
+      <input id="flop" class="sw-explore" type="text" placeholder="Ks7h2c" maxlength="11"
         spellcheck="false" autocomplete="off" aria-label="flop to solve" />
-      <button id="solveBtn" type="button">Solve</button>
+      <input id="tBoard" class="sw-train" type="text" placeholder="Ks7h2c" maxlength="11"
+        spellcheck="false" autocomplete="off" aria-label="board to train" />
+      <input id="tHand" class="sw-train" type="text" placeholder="AhKh" maxlength="7"
+        spellcheck="false" autocomplete="off" aria-label="your hand" />
+      <button id="solveBtn" class="sw-explore" type="button">Solve</button>
+      <button id="tSetup" class="sw-train" type="button">Set up</button>
     </div>
     <div class="meta" id="meta"></div>
   </header>
@@ -62,6 +78,9 @@ app.innerHTML = `
 
 const selector = app.querySelector<HTMLSelectElement>("#spot")!;
 const meta = app.querySelector<HTMLDivElement>("#meta")!;
+const depthSel = app.querySelector<HTMLSelectElement>("#tDepth")!;
+const flopIn = app.querySelector<HTMLInputElement>("#flop")!;
+const boardIn = app.querySelector<HTMLInputElement>("#tBoard")!;
 const tableHost = app.querySelector<HTMLElement>("#tableHost")!;
 const gridHost = app.querySelector<HTMLElement>("#gridHost")!;
 const detailHost = app.querySelector<HTMLElement>("#detail")!;
@@ -70,6 +89,10 @@ const legendHost = app.querySelector<HTMLElement>("#legend")!;
 // spots solved live this session (REAL solver output from the server, never mocked); lets the
 // selector flip back to an on-demand spot without a static data/<key>.json file
 const sessionSpots = new Map<string, SpotContract>();
+
+const TRAINER_PROMPT =
+  "Set up a spot in the top bar (depth, board, your hand) and commit to an action. " +
+  "The solver's answer reveals only after you commit.";
 
 function showStageMessage(title: string, body: string) {
   tableHost.innerHTML = `<div class="empty"><h2>${title}</h2><p>${body}</p></div>`;
@@ -183,8 +206,22 @@ function initModeToggle() {
   };
   const trainerHost = document.querySelector<HTMLElement>("#trainerHost")!;
   const reviewHost = document.querySelector<HTMLElement>("#reviewHost")!;
+  let current: "explore" | "train" | "review" = "explore";
 
   const setMode = (mode: "explore" | "train" | "review") => {
+    // one control, two wirings: the board you typed follows you across modes. Sync on
+    // LEAVING a mode (not entering) so a review detour cannot resurrect a stale value.
+    // The dispatched input event re-runs each side's own validation.
+    if (mode !== current) {
+      if (current === "explore") {
+        boardIn.value = flopIn.value;
+        boardIn.dispatchEvent(new Event("input"));
+      } else if (current === "train") {
+        flopIn.value = boardIn.value;
+        flopIn.dispatchEvent(new Event("input"));
+      }
+      current = mode;
+    }
     document.body.classList.toggle("mode-train", mode === "train");
     document.body.classList.toggle("mode-review", mode === "review");
     for (const [m, btn] of Object.entries(buttons)) {
@@ -193,11 +230,9 @@ function initModeToggle() {
     trainerHost.hidden = mode !== "train";
     reviewHost.hidden = mode !== "review";
     if (mode === "train") {
-      // entering train mode blanks the stage: nothing solver-derived pre-commit (D35)
-      showStageMessage(
-        "Trainer",
-        "Set up a spot (depth, board, your hand) and commit to an action. The solver's answer reveals only after you commit.",
-      );
+      // entering (or re-clicking) train mode blanks the stage: nothing solver-derived
+      // pre-commit (D35)
+      showStageMessage("Trainer", TRAINER_PROMPT);
     } else if (mode === "explore" && selector.value) {
       void loadSpot(selector.value);
     }
@@ -211,8 +246,9 @@ function initModeToggle() {
 async function main() {
   initSolvePanel(
     {
-      input: app!.querySelector<HTMLInputElement>("#flop")!,
+      input: flopIn,
       button: app!.querySelector<HTMLButtonElement>("#solveBtn")!,
+      depth: depthSel,
       status: document.querySelector<HTMLElement>("#solveStatus")!,
       label: document.querySelector<HTMLElement>("#ssLabel")!,
       track: document.querySelector<HTMLElement>("#ssTrack")!,
@@ -226,12 +262,12 @@ async function main() {
   initReview(document.querySelector<HTMLElement>("#reviewHost")!);
   initTrainer({
     host: document.querySelector<HTMLElement>("#trainerHost")!,
+    depthSel,
+    boardIn,
+    handIn: app!.querySelector<HTMLInputElement>("#tHand")!,
+    setupBtn: app!.querySelector<HTMLButtonElement>("#tSetup")!,
     onReveal: (payload, handClass) => onSolved(payload, handClass),
-    blankStage: () =>
-      showStageMessage(
-        "Trainer",
-        "Set up a spot (depth, board, your hand) and commit to an action. The solver's answer reveals only after you commit.",
-      ),
+    blankStage: () => showStageMessage("Trainer", TRAINER_PROMPT),
   });
 
   let index: IndexFile;

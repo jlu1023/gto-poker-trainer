@@ -1,6 +1,8 @@
 // Phase 3: the solve-on-demand panel. A flop input + Submit that POSTs to the local solve
 // server, a progress strip driven by the STREAMED exploitability (never a fake spinner), and
 // the completion hook that feeds the returned spot into the existing render pipeline.
+// The depth comes from the shared header select (was fixed at 50bb before the control was
+// unified); it is read at submit time, so mid-solve changes only affect the NEXT solve.
 //
 // The server speaks SSE over a POST response. The browser EventSource API cannot POST (and its
 // auto-reconnect would re-fire solves), so we parse the text/event-stream off a fetch body.
@@ -119,6 +121,7 @@ export async function requestSolve(
 export interface SolvePanelRefs {
   input: HTMLInputElement;
   button: HTMLButtonElement;
+  depth: HTMLSelectElement; // the shared header depth select (50/100bb)
   status: HTMLElement; // the strip; carries data-state / data-progress-count for verification
   label: HTMLElement;
   track: HTMLElement;
@@ -128,7 +131,7 @@ export interface SolvePanelRefs {
 
 /** Wire the solve panel. `onSolved` receives every successful completion (fresh or cached). */
 export function initSolvePanel(refs: SolvePanelRefs, onSolved: (payload: SolveComplete) => void) {
-  const { input, button, status, label, fill, value } = refs;
+  const { input, button, depth: depthSel, status, label, fill, value } = refs;
   let solving = false;
 
   const setState = (state: string) => {
@@ -156,13 +159,14 @@ export function initSolvePanel(refs: SolvePanelRefs, onSolved: (payload: SolveCo
   const start = () => {
     const cards = validate();
     if (!cards || solving) return;
+    const depth = Number(depthSel.value) || 50;
 
     solving = true;
     input.disabled = true;
     button.disabled = true;
     status.dataset.progressCount = "0";
     setState("solving");
-    label.textContent = `solving ${cards.join("")}`;
+    label.textContent = `solving ${cards.join("")} · ${depth}bb`;
     fill.style.width = "0%";
     value.textContent = "waiting for the first convergence sample";
 
@@ -208,7 +212,7 @@ export function initSolvePanel(refs: SolvePanelRefs, onSolved: (payload: SolveCo
         label.textContent = "solve failed";
         value.textContent = message;
       },
-    });
+    }, depth);
   };
 
   input.addEventListener("input", () => void validate());

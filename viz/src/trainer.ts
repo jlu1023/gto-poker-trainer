@@ -5,6 +5,10 @@
 // No-peeking is enforced by data absence (D35): pre-commit the client holds only the setup
 // payload (action labels + booleans). The solve and grade requests fire on the commit click,
 // never before. host.dataset.phase tracks the state machine for the verification gate.
+//
+// The entry fields (depth / board / hand / Set up) live in the topbar's unified solve
+// control and are handed in via TrainerDeps; the strip below the header keeps the flow
+// content (errors, commit question, progress, grade card, session history).
 
 import type { GradeResponse, SetupResponse, SolveComplete, Verdict } from "./types";
 import { parseFlop, requestSolve, SERVER } from "./solve";
@@ -33,6 +37,11 @@ interface HistoryRow {
 
 export interface TrainerDeps {
   host: HTMLElement;
+  /** The train-mode fields of the unified header solve control (ids pinned by the gate). */
+  depthSel: HTMLSelectElement;
+  boardIn: HTMLInputElement;
+  handIn: HTMLInputElement;
+  setupBtn: HTMLButtonElement;
   /** Render the solved spot into the stage with the operator's hand class selected. */
   onReveal(payload: SolveComplete, handClass: string): void;
   /** Blank the stage (entry/reset states must show no solver output). */
@@ -60,22 +69,10 @@ function parseHand(raw: string): { cards?: [string, string]; error?: string } {
 }
 
 export function initTrainer(deps: TrainerDeps) {
-  const { host } = deps;
+  const { host, depthSel, boardIn, handIn, setupBtn } = deps;
 
   host.innerHTML = `
-    <div class="t-row t-entry">
-      <label for="tDepth">depth</label>
-      <select id="tDepth" aria-label="stack depth">
-        <option value="50">50bb</option>
-        <option value="100">100bb</option>
-      </select>
-      <label for="tBoard">board</label>
-      <input id="tBoard" type="text" placeholder="Ks7h2c" maxlength="11" spellcheck="false" autocomplete="off" />
-      <label for="tHand">your hand</label>
-      <input id="tHand" type="text" placeholder="AhKh" maxlength="7" spellcheck="false" autocomplete="off" />
-      <button id="tSetup" type="button">Set up</button>
-      <span class="t-err" id="tErr"></span>
-    </div>
+    <div class="t-row" id="tErrRow" hidden><span class="t-err" id="tErr"></span></div>
     <div class="t-row t-commit" id="tCommit" hidden>
       <span class="t-q" id="tQuestion"></span>
       <div class="t-actions" id="tActions"></div>
@@ -89,10 +86,7 @@ export function initTrainer(deps: TrainerDeps) {
     <div class="t-history" id="tHistory" hidden></div>
   `;
 
-  const depthSel = host.querySelector<HTMLSelectElement>("#tDepth")!;
-  const boardIn = host.querySelector<HTMLInputElement>("#tBoard")!;
-  const handIn = host.querySelector<HTMLInputElement>("#tHand")!;
-  const setupBtn = host.querySelector<HTMLButtonElement>("#tSetup")!;
+  const errRow = host.querySelector<HTMLElement>("#tErrRow")!;
   const errEl = host.querySelector<HTMLElement>("#tErr")!;
   const commitRow = host.querySelector<HTMLElement>("#tCommit")!;
   const questionEl = host.querySelector<HTMLElement>("#tQuestion")!;
@@ -113,6 +107,7 @@ export function initTrainer(deps: TrainerDeps) {
   };
   const setError = (msg: string) => {
     errEl.textContent = msg;
+    errRow.hidden = msg === ""; // header inputs report into the strip, like explore's
   };
 
   const resetToEntry = () => {
@@ -202,7 +197,7 @@ export function initTrainer(deps: TrainerDeps) {
     }
 
     setup = s;
-    questionEl.textContent = `${s.hand} on ${s.board.join(" ")} (${s.depth}bb SRP, BB to act)${s.cached ? " · cached" : ""} — your action?`;
+    questionEl.textContent = `${s.hand} on ${s.board.join(" ")} (${s.depth}bb SRP, BB to act)${s.cached ? " · cached" : ""} - your action?`;
     actionsEl.innerHTML = "";
     for (const a of s.actions) {
       const btn = document.createElement("button");
