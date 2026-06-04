@@ -34,7 +34,7 @@ much for "can I verify it is right" as for "will I hit it often."
   deferred.
 
 ## Workspace
-Six crates under `crates/`:
+Seven crates under `crates/`:
 - `config`  (`gto-config`)  - single source of truth for every tunable; serde schema + `default.toml`.
 - `engine`  (`gto-engine`)  - `Spot` model, spot-to-solver mapping, `solve_spot` /
   `solve_spot_streaming`, `query_node`.
@@ -43,10 +43,15 @@ Six crates under `crates/`:
 - `store`   (`gto-store`)   - precompute-and-cache: serialize solved trees + manifest; the shared
   viz contract (`gto_store::viz`); examples `smoke` / `build_matrix` / `export_viz`.
 - `server`  (`gto-server`)  - Phase 3 localhost solve-on-demand binary: POST a flop, SSE streams
-  convergence, the matrix is the cache.
+  convergence, the matrix is the cache. Phase 4/5 endpoints: trainer setup/grade, review
+  ingest/grade/report.
+- `history` (`gto-history`) - Phase 5 hand-history leak analysis: JSON input contract +
+  PokerStars-text adapter, envelope classifier (skip-with-reason), node aggregation
+  (range-conditioned comparator, Poisson-binomial significance, mix-EV cost), JSONL store.
 
 Dependency graph (DAG): `config` is the base; `engine` and `preflop` depend on `config`; `validate`
-and `store` depend on `engine` + `config`; `server` depends on all five.
+and `store` depend on `engine` + `config`; `history` depends on `config` + `store`; `server`
+depends on all six.
 
 ## Spot model (the highest-risk piece)
 postflop-solver solves a subgame from a chosen street. Preflop / earlier-street history is NOT passed
@@ -81,9 +86,17 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   client fetches nothing solver-derived until the action is committed. Grading is engine-side
   (`gto_engine::grade`, pure + unit-tested); per-action EV comes from `expected_values_detail`
   at the root (see DECISIONS F5: child-node navigation gives reference-shifted EVs, never use it).
+- Review (Phase 5): the viz "review" mode ingests hand histories (PokerStars text or the JSON
+  contract in `crates/history/src/schema.rs`) and reports AGGREGATE frequency leaks by node.
+  Frequency, not sequence: no surface may emit a next-move recommendation. The GTO comparator is
+  range-conditioned (D44, caveat ships in the payload); per-instance EV sanity asserts before
+  any record enters `matrix/history/graded.jsonl` (D45, the F5 tripwire). Out-of-envelope
+  decisions skip with precise reasons; never approximate or action-translate.
 - Gates: `verify_viz.py` (Phase 2), `verify_solve.py` (Phase 3), `verify_trainer.py` (Phase 4),
-  all run with the Python 3.12 interpreter that has Playwright
-  (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`).
+  `verify_review.py` (Phase 5), all run with the Python 3.12 interpreter that has Playwright
+  (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`). Their fresh-board
+  candidate pools are DISJOINT (each run solves + caches one candidate); extend a pool rather
+  than borrowing another verifier's boards.
 
 ## Writing conventions
 - No em dashes in any prose. Use hyphens, colons, or parentheses.
