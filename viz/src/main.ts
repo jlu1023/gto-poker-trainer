@@ -2,9 +2,9 @@ import "./style.css";
 import type { SolveComplete, SpotContract } from "./types";
 import type { ClassAgg } from "./grid";
 import { renderTable } from "./table";
-import { renderGrid, actionColors } from "./grid";
+import { renderGrid, actionColors, classOf } from "./grid";
 import { initSolvePanel } from "./solve";
-import { initTrainer } from "./trainer";
+import { initTrainer, parseHand } from "./trainer";
 import { initReview } from "./review";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -47,6 +47,13 @@ app.innerHTML = `
       <button id="solveBtn" class="sw-explore" type="button">Solve</button>
       <button id="tSetup" class="sw-train" type="button">Set up</button>
     </div>
+    <div class="hand-wrap">
+      <label for="exploreHand">your hand</label>
+      <input id="exploreHand" type="text" placeholder="AdAc" maxlength="7"
+        spellcheck="false" autocomplete="off" disabled
+        aria-label="your hand (highlights its grid cell)" />
+      <span class="hand-hint" id="handHint"></span>
+    </div>
     <div class="meta" id="meta"></div>
   </header>
   <div id="solveStatus" class="solve-status" data-state="idle" data-progress-count="0">
@@ -70,6 +77,8 @@ const meta = app.querySelector<HTMLDivElement>("#meta")!;
 const depthSel = app.querySelector<HTMLSelectElement>("#tDepth")!;
 const flopIn = app.querySelector<HTMLInputElement>("#flop")!;
 const boardIn = app.querySelector<HTMLInputElement>("#tBoard")!;
+const handHl = app.querySelector<HTMLInputElement>("#exploreHand")!;
+const handHint = app.querySelector<HTMLElement>("#handHint")!;
 const tableHost = app.querySelector<HTMLElement>("#tableHost")!;
 const gridHost = app.querySelector<HTMLElement>("#gridHost")!;
 const detailHost = app.querySelector<HTMLElement>("#detail")!;
@@ -80,6 +89,14 @@ const legendHost = app.querySelector<HTMLElement>("#legend")!;
 // is re-typing it: the solve path is cache-first, so presets load instantly.
 let lastSpot: SpotContract | null = null;
 
+// the live grid's selection handles + the spot it renders, for the explore hand-highlight
+// (null whenever no grid is on stage; renderGrid's closures are otherwise ephemeral)
+let currentGrid: {
+  spot: SpotContract;
+  selectClass: (label: string) => boolean;
+  selectDefault: () => void;
+} | null = null;
+
 const TRAINER_PROMPT =
   "Set up a spot in the top bar (depth, board, your hand) and commit to an action. " +
   "The solver's answer reveals only after you commit.";
@@ -89,11 +106,50 @@ const EXPLORE_IDLE_BODY =
   "Type a flop in the top bar, pick a depth, and Solve. " +
   "Cached boards load instantly; new boards stream a live solve.";
 
+function setHandHint(text: string, isError = false) {
+  handHint.textContent = text;
+  handHint.dataset.state = isError ? "error" : "info";
+}
+
+/** The explore hand-highlight: map typed hole cards to their grid cell and select it.
+ *  Claims CELL MEMBERSHIP only - selection shows the class aggregate exactly as a cell
+ *  click does, never the typed combo's own strategy (blocker effects make individual
+ *  combos diverge from the class mean; a per-combo readout is a separate feature).
+ *  Returns true only when a valid, in-range hand was highlighted. */
+function applyHandHighlight(): boolean {
+  if (!currentGrid) return false;
+  const stripped = handHl.value.replace(/[\s,]+/g, "");
+  if (stripped.length < 4) {
+    setHandHint(""); // empty or still typing: no claim, no error noise
+    return false;
+  }
+  const parsed = parseHand(handHl.value);
+  if (!parsed.cards) {
+    setHandHint(parsed.error || "enter your 2-card hand", true);
+    return false;
+  }
+  const onBoard = parsed.cards.find((c) => currentGrid!.spot.board.includes(c));
+  if (onBoard) {
+    setHandHint(`${onBoard} is on the board`, true);
+    return false;
+  }
+  const label = classOf(parsed.cards.join(""));
+  if (!currentGrid.selectClass(label)) {
+    setHandHint(`${label} · not in range here`);
+    return false;
+  }
+  setHandHint(`cell ${label} · class average`);
+  return true;
+}
+
 function showStageMessage(title: string, body: string) {
   tableHost.innerHTML = `<div class="empty"><h2>${title}</h2><p>${body}</p></div>`;
   gridHost.innerHTML = "";
   detailHost.innerHTML = "";
   legendHost.innerHTML = "";
+  currentGrid = null;
+  handHl.disabled = true;
+  setHandHint("");
 }
 
 function renderMeta(spot: SpotContract) {
@@ -156,7 +212,12 @@ function renderSpot(spot: SpotContract, selectClassLabel?: string) {
     renderDetail(spot, colors, agg);
   });
   gridHost.replaceChildren(el);
-  if (!selectClassLabel || !selectClass(selectClassLabel)) {
+  currentGrid = { spot, selectClass, selectDefault };
+  handHl.disabled = false;
+  // selection precedence: trainer-reveal class > valid in-range typed hand > default.
+  // The hand highlight re-validates against THIS board, so a hand that collides on the
+  // new board shows its error and the default selection stands.
+  if (!(selectClassLabel && selectClass(selectClassLabel)) && !applyHandHighlight()) {
     selectDefault();
   }
 }
@@ -243,6 +304,14 @@ function main() {
     setupBtn: app!.querySelector<HTMLButtonElement>("#tSetup")!,
     onReveal: (payload, handClass) => onSolved(payload, handClass),
     blankStage: () => showStageMessage("Trainer", TRAINER_PROMPT),
+  });
+
+  // explore hand-highlight: live as you type; clearing the input restores the default cell
+  handHl.addEventListener("input", () => {
+    if (!currentGrid) return;
+    if (!applyHandHighlight() && handHl.value.replace(/[\s,]+/g, "").length === 0) {
+      currentGrid.selectDefault();
+    }
   });
 
   // nothing on stage until the operator solves something; the solve path is cache-first,

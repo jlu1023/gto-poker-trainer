@@ -101,7 +101,8 @@ body {
   padding-left: 22px;
   border-left: 1px solid var(--border);
 }
-.solve-wrap label {
+.solve-wrap label,
+.hand-wrap label {
   font-family: var(--font-mono);
   font-size: 11px;
   text-transform: uppercase;
@@ -123,7 +124,8 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.solve-wrap input {
+.solve-wrap input,
+.hand-wrap input {
   font-family: var(--font-mono);
   font-size: 13px;
   letter-spacing: 0.14em;
@@ -134,14 +136,17 @@ body {
   padding: 8px 12px;
   width: 110px;
 }
-#tHand {
+#tHand,
+#exploreHand {
   width: 92px;
 }
-.solve-wrap input:focus {
+.solve-wrap input:focus,
+.hand-wrap input:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-.solve-wrap input::placeholder {
+.solve-wrap input::placeholder,
+.hand-wrap input::placeholder {
   color: rgba(255, 255, 255, 0.25);
   letter-spacing: 0.14em;
 }
@@ -182,6 +187,28 @@ body.mode-train .solve-wrap .sw-explore {
 }
 body.mode-train .solve-wrap .sw-train {
   display: inline-block;
+}
+
+/* ---------- explore hand-highlight (read-only lens over the rendered grid) ---------- */
+.hand-wrap {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-left: 22px;
+  border-left: 1px solid var(--border);
+}
+.hand-wrap input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.hand-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.hand-hint[data-state="error"] {
+  color: var(--accent-2);
 }
 
 /* the convergence strip under the topbar */
@@ -273,9 +300,10 @@ body.mode-train .solve-wrap .sw-train {
   color: #14110a;
   font-weight: 700;
 }
-/* train mode hides the explore convergence strip; the solve control itself stays (its
-   fields swap to the train set) */
-body.mode-train .solve-status {
+/* train mode hides the explore convergence strip and the explore hand lens; the solve
+   control itself stays (its fields swap to the train set) */
+body.mode-train .solve-status,
+body.mode-train .hand-wrap {
   display: none;
 }
 
@@ -489,6 +517,7 @@ body.mode-train .solve-status {
 /* ---------- review mode (Phase 5) ---------- */
 body.mode-review .stage,
 body.mode-review .solve-wrap,
+body.mode-review .hand-wrap,
 body.mode-review .solve-status {
   display: none;
 }

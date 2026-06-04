@@ -56,8 +56,9 @@ function normalizeCard(raw: string): string | null {
   return r + s;
 }
 
-/** Parse a hand like "ahkh" into two normalized cards, or an error string. */
-function parseHand(raw: string): { cards?: [string, string]; error?: string } {
+/** Parse a hand like "ahkh" into two normalized cards, or an error string.
+ *  Exported: explore's hand-highlight input reuses the same validation. */
+export function parseHand(raw: string): { cards?: [string, string]; error?: string } {
   const s = raw.replace(/[\s,]+/g, "");
   if (s.length === 0) return { error: "" };
   if (s.length !== 4) return { error: "hand needs exactly 2 cards, e.g. AhKh" };
