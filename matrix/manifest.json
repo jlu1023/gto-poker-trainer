@@ -71,6 +71,26 @@
       "exploitability_pct_pot": 0.0044593513,
       "iterations": 40
     },
+    "50bb_7d5h2c_flop_srp-v1": {
+      "file": "50bb_7d5h2c_flop_srp-v1.bin.zst",
+      "summary": "50bb_7d5h2c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "7d5h2c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.004968767,
+      "iterations": 80
+    },
+    "50bb_8c6d2h_flop_srp-v1": {
+      "file": "50bb_8c6d2h_flop_srp-v1.bin.zst",
+      "summary": "50bb_8c6d2h_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "8c6d2h",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0041464474,
+      "iterations": 90
+    },
     "50bb_8d6s3c_flop_srp-v1": {
       "file": "50bb_8d6s3c_flop_srp-v1.bin.zst",
       "summary": "50bb_8d6s3c_flop_srp-v1.summary.json",
@@ -91,6 +111,26 @@
       "exploitability_pct_pot": 0.004391117,
       "iterations": 90
     },
+    "50bb_9d7s4c_flop_srp-v1": {
+      "file": "50bb_9d7s4c_flop_srp-v1.bin.zst",
+      "summary": "50bb_9d7s4c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "9d7s4c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.003971581,
+      "iterations": 90
+    },
+    "50bb_9h5s3c_flop_srp-v1": {
+      "file": "50bb_9h5s3c_flop_srp-v1.bin.zst",
+      "summary": "50bb_9h5s3c_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "9h5s3c",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.00475459,
+      "iterations": 90
+    },
     "50bb_9s6h3d_flop_srp-v1": {
       "file": "50bb_9s6h3d_flop_srp-v1.bin.zst",
       "summary": "50bb_9s6h3d_flop_srp-v1.summary.json",
@@ -109,6 +149,16 @@
       "street": "flop",
       "bet_tree": "srp-v1",
       "exploitability_pct_pot": 0.00416299,
+      "iterations": 90
+    },
+    "50bb_Jh7c2s_flop_srp-v1": {
+      "file": "50bb_Jh7c2s_flop_srp-v1.bin.zst",
+      "summary": "50bb_Jh7c2s_flop_srp-v1.summary.json",
+      "stack_depth_bb": 50,
+      "board": "Jh7c2s",
+      "street": "flop",
+      "bet_tree": "srp-v1",
+      "exploitability_pct_pot": 0.0047175977,
       "iterations": 90
     },
     "50bb_Qs8s5h_flop_srp-v1": {

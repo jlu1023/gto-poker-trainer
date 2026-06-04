@@ -43,7 +43,9 @@ FREQ_FLOOR = 0.10
 
 CACHED_50 = "8d6s3c"        # solved in Phase 3
 CACHED_100 = "Ks7h2c"       # solved in Phase 1
-FRESH_CANDIDATES = ["9s6h3d", "8h5c2s", "9d7s4c", "8c6d2h", "9h5s3c", "7d5h2c"]
+# DISJOINT from verify_solve's and verify_review's candidate pools, so gate runs never
+# consume each other's fresh boards (each run solves + caches one candidate)
+FRESH_CANDIDATES = ["Jh7c2s", "Qd7s2h", "Jc6d2s", "Td7h3c", "Qh6s2d"]
 
 SOLVE_WAIT_MS = 240_000
 

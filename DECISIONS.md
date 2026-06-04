@@ -188,6 +188,54 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
 - **D37. Session history = in-memory list** (board, depth, hand, action, verdict, EV loss;
   running + average EV loss). Persistence / spaced repetition / randomized spots deferred.
 
+## Phase 5 decisions (approved 2026-06-04 with operator additions D44/D45)
+
+- **D38. Input = minimal JSON schema as the engine contract + a PokerStars-text adapter.**
+  Core (envelope/aggregation) is built and tested against synthetic JSON fixtures; the PS
+  adapter quarantines format landmines (posts/dead blinds, all-in markers, uncalled-bet
+  returns, locale, sit-outs, dealt-count vs table-max). Hero hole cards required to grade.
+- **D39. Envelope = decision-level, precise, no action translation ever.** HU (2 dealt),
+  standard blinds, SRP only; open in [2.3, 2.7]bb and eff stack within +-7% of {50,100}
+  (tight: a graded instance must approximate the solved geometry to sub-noise); FLOP only;
+  check-only action prefixes (two node shapes: BB root, IP after BB check); hero's own bet
+  maps only within +-8% pot of a tree size, else skipped (`off-tree-hero-size`); shrunk-tree
+  instances excluded from size-split math (`solve-shrunk-size-unavailable`). Full skip/state
+  taxonomy in PLAN-phase5.md incl. `pending-solve` as a state distinct from skipped.
+- **D40. Aggregation = per-instance-mean GTO comparator + Poisson-binomial significance +
+  mix-EV primary cost.** g(a) = mean_i p_i(a) over the operator's actual combos; z-test with
+  mu = sum p_i, sigma^2 = sum p_i(1-p_i) (plain binomial SE is the wrong null for
+  heterogeneous mixes); ranked leak iff N >= 10 and |z| > 2. Primary EV cost = sum_i
+  (node.ev[h] - node.ev_per_action[h + a*n]) computed in the aggregator (node.ev IS the mix
+  dot product), NOT from grade() (clamped vs-best, kept as the secondary "max exploitable").
+- **D41. Ingestion = two-pass.** Pass 1 instant parse/classify -> coverage; Pass 2 sequential
+  fresh solves through the existing /api/solve (semaphore-resilient retry, per-run cap
+  default 25, capped -> pending-solve), then solve-all -> re-read manifest -> grade-all.
+- **D42. Persistence = accumulating JSONL** (`matrix/history/graded.jsonl`, gitignored),
+  dedupe (hand_id, street, decision_index), schema_version per record, idempotent re-ingest.
+- **D43. Report framing = frequency-only fixed templates, gate-enforced.** "For the hands you
+  held" wording; no per-instance verdicts in the leak report; ranking by EV cost only, never
+  by prescription; a gate tripwire greps the bundle for prescriptive phrasing, WITH the
+  recorded caveat that the grep validates templates, not framing - the safety comes from the
+  per-instance-rate model itself.
+- **D44 (operator). The GTO comparator is RANGE-CONDITIONED - a stated scope boundary.**
+  g(a) is conditioned on the hands actually held, NOT the node's unconditional GTO frequency.
+  The report measures action-given-range leaks only and CANNOT detect range-construction
+  leaks; a skewed arriving range moves g(a) with the selection bias (the operator can look
+  less leaky than they are). One-line caveat in the review UI near the leak table; templates
+  never let g(a) read as "the GTO frequency for this node".
+- **D45 (operator). Per-instance EV sanity assertion before any clipping** (F5 regression
+  guard through read_node): where p_i(a_i) >= the mix floor, assert node.ev[h] >=
+  node.ev_per_action[h + a*n] - eps. You cannot beat the equilibrium mix with an action the
+  solver also mixes; a violation = an F5-style reference error re-entered via read_node ->
+  ingestion fails loudly. Display-time clipping stays but is never the only guard.
+  CALIBRATION (build-time deviation, flagged): eps = 2% pot, not the literal solve target
+  (0.5%). The audit measured LEGITIMATE played-action gaps up to 1.385% pot on converged
+  solves (a mixed action can sit ~1% above the weighted mix), so a 0.5% epsilon would
+  false-fire on audited-good data; F5-class violations are 30%+ of pot, so 2% separates the
+  classes cleanly. Tunable: `[review] ev_sanity_eps_pct_pot`. Companion: the dot-product
+  identity + no-dominant-unplayed-action checks are promoted into check_invariants (audit
+  follow-up priority 1), so fresh solves inherit the guard at the gate.
+
 ## Phase 4 findings
 
 - **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,

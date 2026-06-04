@@ -19,6 +19,7 @@ pub struct Config {
     pub io: IoConfig,
     pub store: StoreConfig,
     pub trainer: TrainerConfig,
+    pub review: ReviewConfig,
 }
 
 /// Everything `engine::solve_spot` needs to turn a `Spot` into a solver query and run it.
@@ -107,6 +108,42 @@ pub struct StoreConfig {
     pub zstd_level: i32,
 }
 
+/// Phase 5 hand-history review knobs.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ReviewConfig {
+    /// Per-ingestion-run cap on FRESH solves; capped spots become the pending-solve state.
+    pub max_fresh_solves_per_run: u32,
+    /// Minimum instances at a node before it may appear in the ranked-leak list.
+    pub min_sample_n: u32,
+    /// |z| threshold (Poisson-binomial) for a ranked leak.
+    pub z_threshold: f64,
+    /// D45: a played-at-mix-floor action may not exceed the mix EV by more than this fraction
+    /// of pot (F5 regression tripwire through read_node). Calibration: audit-measured
+    /// legitimate played-gaps reach ~1.4% pot on converged solves; F5-class violations are
+    /// 30%+ of pot; 2% separates them cleanly (the literal solve target of 0.5% would
+    /// false-fire on audited-good data).
+    pub ev_sanity_eps_pct_pot: f64,
+    /// Hero's own bet maps to a tree size only within this fraction of pot (else skipped
+    /// `off-tree-hero-size`; nearest-mapping would fabricate the size split).
+    pub hero_size_tolerance_pct_pot: f64,
+    /// Frequency floor above which an action counts as "meaningfully played" for D45.
+    pub mix_floor: f64,
+}
+
+impl Default for ReviewConfig {
+    fn default() -> Self {
+        Self {
+            max_fresh_solves_per_run: 25,
+            min_sample_n: 10,
+            z_threshold: 2.0,
+            ev_sanity_eps_pct_pot: 0.02,
+            hero_size_tolerance_pct_pot: 0.08,
+            mix_floor: 0.10,
+        }
+    }
+}
+
 /// Trainer verdict bands (Phase 4). All EV-loss thresholds are fractions of the starting pot.
 /// Verdict precedence: Correct (loss <= eps) > FineMix (freq >= floor AND loss <= minor max)
 /// > MinorLeak (loss <= minor max) > ClearLeak.
@@ -140,6 +177,7 @@ impl Default for Config {
             io: IoConfig::default(),
             store: StoreConfig::default(),
             trainer: TrainerConfig::default(),
+            review: ReviewConfig::default(),
         }
     }
 }

@@ -5,6 +5,7 @@ import { renderTable } from "./table";
 import { renderGrid, actionColors } from "./grid";
 import { initSolvePanel } from "./solve";
 import { initTrainer } from "./trainer";
+import { initReview } from "./review";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("missing #app");
@@ -28,6 +29,7 @@ app.innerHTML = `
     <div class="mode-toggle" role="tablist" aria-label="mode">
       <button id="modeExplore" class="mode-btn mode-btn--active" type="button">explore</button>
       <button id="modeTrain" class="mode-btn" type="button">train</button>
+      <button id="modeReview" class="mode-btn" type="button">review</button>
     </div>
     <div class="selector-wrap">
       <label for="spot">spot</label>
@@ -47,6 +49,7 @@ app.innerHTML = `
     <span class="ss-value" id="ssValue"></span>
   </div>
   <div id="trainerHost" class="trainer" data-phase="entry" hidden></div>
+  <div id="reviewHost" class="review" hidden></div>
   <main class="stage">
     <section class="table-panel" id="tableHost"></section>
     <aside class="data-panel">
@@ -171,30 +174,38 @@ function onSolved(payload: SolveComplete, selectClassLabel?: string) {
   renderSpot(spot, selectClassLabel);
 }
 
-// ---- mode toggle (explore / train) ----
+// ---- mode toggle (explore / train / review) ----
 function initModeToggle() {
-  const exploreBtn = app!.querySelector<HTMLButtonElement>("#modeExplore")!;
-  const trainBtn = app!.querySelector<HTMLButtonElement>("#modeTrain")!;
+  const buttons: Record<string, HTMLButtonElement> = {
+    explore: app!.querySelector<HTMLButtonElement>("#modeExplore")!,
+    train: app!.querySelector<HTMLButtonElement>("#modeTrain")!,
+    review: app!.querySelector<HTMLButtonElement>("#modeReview")!,
+  };
   const trainerHost = document.querySelector<HTMLElement>("#trainerHost")!;
+  const reviewHost = document.querySelector<HTMLElement>("#reviewHost")!;
 
-  const setMode = (mode: "explore" | "train") => {
+  const setMode = (mode: "explore" | "train" | "review") => {
     document.body.classList.toggle("mode-train", mode === "train");
-    exploreBtn.classList.toggle("mode-btn--active", mode === "explore");
-    trainBtn.classList.toggle("mode-btn--active", mode === "train");
+    document.body.classList.toggle("mode-review", mode === "review");
+    for (const [m, btn] of Object.entries(buttons)) {
+      btn.classList.toggle("mode-btn--active", m === mode);
+    }
     trainerHost.hidden = mode !== "train";
+    reviewHost.hidden = mode !== "review";
     if (mode === "train") {
       // entering train mode blanks the stage: nothing solver-derived pre-commit (D35)
       showStageMessage(
         "Trainer",
         "Set up a spot (depth, board, your hand) and commit to an action. The solver's answer reveals only after you commit.",
       );
-    } else if (selector.value) {
+    } else if (mode === "explore" && selector.value) {
       void loadSpot(selector.value);
     }
   };
 
-  exploreBtn.addEventListener("click", () => setMode("explore"));
-  trainBtn.addEventListener("click", () => setMode("train"));
+  buttons.explore.addEventListener("click", () => setMode("explore"));
+  buttons.train.addEventListener("click", () => setMode("train"));
+  buttons.review.addEventListener("click", () => setMode("review"));
 }
 
 async function main() {
@@ -212,6 +223,7 @@ async function main() {
   );
 
   initModeToggle();
+  initReview(document.querySelector<HTMLElement>("#reviewHost")!);
   initTrainer({
     host: document.querySelector<HTMLElement>("#trainerHost")!,
     onReveal: (payload, handClass) => onSolved(payload, handClass),

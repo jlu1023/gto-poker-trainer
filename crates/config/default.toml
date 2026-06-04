@@ -57,3 +57,16 @@ zstd_level = 19
 correct_eps_pct_pot = 0.005
 minor_leak_max_pct_pot = 0.02
 mix_freq_floor = 0.10
+
+[review]
+# Phase 5 hand-history review.
+max_fresh_solves_per_run = 25
+min_sample_n = 10
+z_threshold = 2.0
+# D45 F5-tripwire: played-action EV may not beat the mix EV by more than this fraction of pot.
+# 2% (not the 0.5% solve target): audit-measured legitimate gaps reach ~1.4% pot; F5-class
+# violations are 30%+; 2% separates them without false-firing on good data.
+ev_sanity_eps_pct_pot = 0.02
+# Hero bet sizes map to a tree size only within this fraction of pot; else skipped.
+hero_size_tolerance_pct_pot = 0.08
+mix_floor = 0.10

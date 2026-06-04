@@ -240,44 +240,10 @@ fn solve_store_contract(
     Ok((build_contract(&key, &solution), shrunk))
 }
 
-const RANKS: &[u8] = b"23456789TJQKA";
-const SUITS: &[u8] = b"cdhs"; // index order doubles as the suit tiebreak (s > h > d > c)
-
-/// Validate and canonicalize a submitted flop. Canonical order = rank desc, then suit desc
-/// (s > h > d > c), matching the Phase 1 benchmark keys, so any typing order of the same three
-/// cards maps to ONE spot key (cache correctness).
+/// Validate and canonicalize a submitted flop (delegates to the shared gto-store
+/// implementation so the server and the Phase 5 history classifier can never drift).
 pub(crate) fn canonical_board(cards: &[String]) -> Result<[String; 3], String> {
-    if cards.len() != 3 {
-        return Err(format!("a flop needs exactly 3 cards, got {}", cards.len()));
-    }
-    let mut parsed: Vec<(usize, usize)> = Vec::with_capacity(3);
-    for raw in cards {
-        let c = raw.trim();
-        let chars: Vec<char> = c.chars().collect();
-        if chars.len() != 2 {
-            return Err(format!("malformed card '{c}' (want rank+suit, e.g. Ks)"));
-        }
-        let r = chars[0].to_ascii_uppercase();
-        let s = chars[1].to_ascii_lowercase();
-        let ri = RANKS
-            .iter()
-            .position(|&b| b as char == r)
-            .ok_or_else(|| format!("illegal rank '{r}' in card '{c}'"))?;
-        let si = SUITS
-            .iter()
-            .position(|&b| b as char == s)
-            .ok_or_else(|| format!("illegal suit '{s}' in card '{c}'"))?;
-        if parsed.contains(&(ri, si)) {
-            return Err(format!("duplicate card '{r}{s}'"));
-        }
-        parsed.push((ri, si));
-    }
-    parsed.sort_by(|a, b| b.cmp(a));
-    Ok([fmt_card(parsed[0]), fmt_card(parsed[1]), fmt_card(parsed[2])])
-}
-
-fn fmt_card((ri, si): (usize, usize)) -> String {
-    format!("{}{}", RANKS[ri] as char, SUITS[si] as char)
+    gto_store::canonical_flop(cards).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

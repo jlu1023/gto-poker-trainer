@@ -232,32 +232,64 @@ where
 
 /// Read the root node of an already-solved game, including per-action EV (Phase 4 grading).
 pub fn read_root(game: &mut PostFlopGame) -> Result<NodeStrategy> {
+    read_node(game, &NodeQuery::default())
+}
+
+/// Walk a solved game to the node identified by `query` and read it INCLUDING per-action EV
+/// (Phase 5: grading at non-root nodes, e.g. IP after a BB check, path [Check]).
+///
+/// F5 note: `expected_values_detail(player)` AT the player's own decision node returns the
+/// per-action matrix with one shared money-reference offset per action row
+/// (`starting_pot/2 + node.amount + bias`, interpreter.rs:795), so values are directly
+/// comparable across actions. Reading children instead would shift each action's reference by
+/// its own bet amount and fabricate EV differences that track bet size. Every node read goes
+/// through this one function so the F5-correct call is the only path.
+pub fn read_node(game: &mut PostFlopGame, query: &NodeQuery) -> Result<NodeStrategy> {
     game.back_to_root();
+    walk_path(game, &query.path)?;
     let mut node = read_current_node(game)?;
-    node.ev_per_action = root_action_evs(game, &node);
+    let n = node.hands.len();
+    let num_actions = node.actions.len();
+    // read_current_node has already cached normalized weights at this node
+    let detail = game.expected_values_detail(node.player);
+    node.ev_per_action = if detail.len() == n * num_actions {
+        detail
+    } else {
+        // unexpected shape (e.g. a non-decision node); leave grading data absent rather than wrong
+        Vec::new()
+    };
     game.back_to_root();
     Ok(node)
 }
 
-/// EV per (hand, action) at the root, layout `[hand + action * n]` (same as `strategy`).
-///
-/// `expected_values_detail(player)` AT the player's own decision node returns exactly this:
-/// one row per action, every row normalized to the same money reference point
-/// (`starting_pot/2 + node.amount + bias`, interpreter.rs:795), so the values are directly
-/// comparable across actions. Reading children instead would shift each action's reference by
-/// its own bet amount and fabricate EV differences that track bet size.
-fn root_action_evs(game: &mut PostFlopGame, node: &NodeStrategy) -> Vec<f32> {
-    let n = node.hands.len();
-    let num_actions = node.actions.len();
-    game.back_to_root();
-    game.cache_normalized_weights();
-    let detail = game.expected_values_detail(node.player);
-    if detail.len() == n * num_actions {
-        detail
-    } else {
-        // unexpected shape (e.g. a non-decision root); leave grading data absent rather than wrong
-        Vec::new()
+/// Walk the game from its current node along a semantic step path.
+fn walk_path(game: &mut PostFlopGame, path: &[Step]) -> Result<()> {
+    for step in path {
+        match step {
+            Step::Chance(card) => {
+                if !game.is_chance_node() {
+                    bail!("query expected a chance node but the current node is a player node");
+                }
+                game.play(*card as usize);
+            }
+            Step::Action(action) => {
+                if game.is_chance_node() {
+                    bail!("query expected a player node but the current node is a chance node");
+                }
+                let actions = game.available_actions();
+                // match semantically via Debug rendering (no PartialEq dependency on Action)
+                let want = format!("{action:?}");
+                let idx = actions
+                    .iter()
+                    .position(|a| format!("{a:?}") == want)
+                    .ok_or_else(|| {
+                        anyhow!("action {want} not available; options are {actions:?}")
+                    })?;
+                game.play(idx);
+            }
+        }
     }
+    Ok(())
 }
 
 /// The legal root actions for a spot, derived from the bet-tree config alone (no card
@@ -287,36 +319,10 @@ pub fn hand_range_weight(range_str: &str, hand: &str) -> Result<f32> {
     Ok(range.get_weight_by_cards(c1, c2))
 }
 
-/// Walk a solved game to the node identified by `query` and read it.
+/// Walk a solved game to the node identified by `query` and read it (per-action EV included
+/// since Phase 5; `read_node` is the single primitive every node read goes through).
 pub fn query_node(solution: &mut SpotSolution, query: &NodeQuery) -> Result<NodeStrategy> {
-    let game = &mut solution.game;
-    game.back_to_root();
-    for step in &query.path {
-        match step {
-            Step::Chance(card) => {
-                if !game.is_chance_node() {
-                    bail!("query expected a chance node but the current node is a player node");
-                }
-                game.play(*card as usize);
-            }
-            Step::Action(action) => {
-                if game.is_chance_node() {
-                    bail!("query expected a player node but the current node is a chance node");
-                }
-                let actions = game.available_actions();
-                // match semantically via Debug rendering (no PartialEq dependency on Action)
-                let want = format!("{action:?}");
-                let idx = actions
-                    .iter()
-                    .position(|a| format!("{a:?}") == want)
-                    .ok_or_else(|| {
-                        anyhow!("action {want} not available; options are {actions:?}")
-                    })?;
-                game.play(idx);
-            }
-        }
-    }
-    read_current_node(game)
+    read_node(&mut solution.game, query)
 }
 
 /// Read the strategy / EV / equity at whatever node the game is currently positioned on.

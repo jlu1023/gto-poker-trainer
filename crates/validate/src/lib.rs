@@ -24,13 +24,16 @@ pub struct ValidationReport {
     pub exploitability_ok: bool,
     pub strategy_normalized: bool,
     pub max_normalization_error: f32,
+    /// Per-action EV checks (Phase 5, audit follow-up P1): dot-product identity + no
+    /// dominant unplayed action. True when ev_per_action is absent (nothing to check).
+    pub ev_consistency_ok: bool,
     pub notes: Vec<String>,
 }
 
 impl ValidationReport {
     /// True when every implemented invariant passed.
     pub fn passed(&self) -> bool {
-        self.exploitability_ok && self.strategy_normalized
+        self.exploitability_ok && self.strategy_normalized && self.ev_consistency_ok
     }
 }
 
@@ -59,7 +62,77 @@ pub fn check_invariants(solution: &SpotSolution, cfg: &Config) -> ValidationRepo
             .push(format!("root strategy not normalized (max error {err:.2e})"));
     }
 
+    // 3. per-action EV checks (Phase 5; promotes the manual F5 catch into a permanent gate)
+    let pot_chips = (solution.spot.pot_bb * cfg.solve.chip_per_bb as f64) as f32;
+    let (ev_ok, ev_notes) = ev_consistency(&solution.root, pot_chips);
+    report.ev_consistency_ok = ev_ok;
+    report.notes.extend(ev_notes);
+
     report
+}
+
+/// Per-action EV invariants on a node that carries `ev_per_action` (skipped when absent).
+///
+/// (a) Dot-product identity: `ev[h] == sum_a strategy[h,a] * ev_per_action[h,a]` (that is the
+///     solver's own definition of the mix EV; the audit measured max error 0.0000, tolerance
+///     here 0.05 chips).
+/// (b) No dominant unplayed action: an action with ~0 frequency may not have meaningfully
+///     higher EV than the best PLAYED action (corrected F5 form: a wide full spread is
+///     legitimate for strong made hands; what is impossible at equilibrium is leaving a
+///     better action unplayed). Audit-measured legitimate worst: 0.086 chips; F5-class
+///     violations are 30+ chips; tolerance 1% of pot separates them cleanly.
+pub fn ev_consistency(node: &NodeStrategy, pot_chips: f32) -> (bool, Vec<String>) {
+    let n = node.hands.len();
+    let num_actions = node.actions.len();
+    if node.ev_per_action.len() != n * num_actions || n == 0 || num_actions == 0 {
+        return (true, Vec::new()); // nothing to check (pre-Phase-4 sidecar or non-decision node)
+    }
+
+    let mut notes = Vec::new();
+    let dot_tol = 0.05_f32; // chips
+    let dominance_tol = 0.01_f32 * pot_chips; // 1% of pot, in chips
+
+    let mut max_dot_err = 0.0_f32;
+    let mut max_dominance = 0.0_f32;
+    for h in 0..n {
+        // skip hands the player never holds here (zero strategy mass)
+        let mass: f32 = (0..num_actions).map(|a| node.strategy[h + a * n]).sum();
+        if mass <= 1e-3 {
+            continue;
+        }
+        let dot: f32 = (0..num_actions)
+            .map(|a| node.strategy[h + a * n] * node.ev_per_action[h + a * n])
+            .sum();
+        max_dot_err = max_dot_err.max((dot - node.ev[h]).abs());
+
+        let best_played = (0..num_actions)
+            .filter(|&a| node.strategy[h + a * n] >= 0.01)
+            .map(|a| node.ev_per_action[h + a * n])
+            .fold(f32::NEG_INFINITY, f32::max);
+        let best_overall = (0..num_actions)
+            .map(|a| node.ev_per_action[h + a * n])
+            .filter(|e| e.is_finite())
+            .fold(f32::NEG_INFINITY, f32::max);
+        if best_played.is_finite() && best_overall.is_finite() {
+            max_dominance = max_dominance.max(best_overall - best_played);
+        }
+    }
+
+    let mut ok = true;
+    if max_dot_err > dot_tol {
+        ok = false;
+        notes.push(format!(
+            "ev != strategy . ev_per_action (max error {max_dot_err:.3} chips > {dot_tol})"
+        ));
+    }
+    if max_dominance > dominance_tol {
+        ok = false;
+        notes.push(format!(
+            "an unplayed action dominates the played mix by {max_dominance:.3} chips \
+             (> {dominance_tol:.2}); F5-class reference error suspected"
+        ));
+    }
+    (ok, notes)
 }
 
 /// For every hand at a node, verify the action probabilities sum to ~1.

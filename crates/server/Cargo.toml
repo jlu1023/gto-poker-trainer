@@ -9,6 +9,7 @@ description = "Localhost solve-on-demand server: flop in, SSE convergence out, m
 [dependencies]
 gto-config = { workspace = true }
 gto-engine = { workspace = true }
+gto-history = { workspace = true }
 gto-preflop = { workspace = true }
 gto-store = { workspace = true }
 gto-validate = { workspace = true }

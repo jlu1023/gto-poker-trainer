@@ -8,3 +8,6 @@
 /matrix/*.bin
 /matrix/*.bin.zst
 /matrix/*.summary.json
+
+# Phase 5 graded-decision store (personal data, accumulates per ingestion)
+/matrix/history/

@@ -14,7 +14,7 @@
 
 pub mod viz;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use gto_config::{BetTreeConfig, Config};
 use gto_engine::{read_root, Spot, SpotSolution, SpotSolutionSummary, Street};
 use postflop_solver::{load_data_from_file, save_data_to_file, PostFlopGame};
@@ -46,6 +46,46 @@ impl Default for Manifest {
     fn default() -> Self {
         Self { version: 1, spots: BTreeMap::new() }
     }
+}
+
+const RANKS: &[u8] = b"23456789TJQKA";
+const SUITS: &[u8] = b"cdhs"; // index order doubles as the suit tiebreak (s > h > d > c)
+
+/// Validate and canonicalize a flop. Canonical order = rank desc, then suit desc
+/// (s > h > d > c), matching the Phase 1 benchmark keys, so any typing order of the same
+/// three cards maps to ONE spot key (cache correctness). One implementation, shared by the
+/// solve server and the Phase 5 history classifier.
+pub fn canonical_flop(cards: &[String]) -> Result<[String; 3]> {
+    if cards.len() != 3 {
+        bail!("a flop needs exactly 3 cards, got {}", cards.len());
+    }
+    let mut parsed: Vec<(usize, usize)> = Vec::with_capacity(3);
+    for raw in cards {
+        let c = raw.trim();
+        let chars: Vec<char> = c.chars().collect();
+        if chars.len() != 2 {
+            bail!("malformed card '{c}' (want rank+suit, e.g. Ks)");
+        }
+        let r = chars[0].to_ascii_uppercase();
+        let s = chars[1].to_ascii_lowercase();
+        let ri = RANKS
+            .iter()
+            .position(|&b| b as char == r)
+            .ok_or_else(|| anyhow!("illegal rank '{r}' in card '{c}'"))?;
+        let si = SUITS
+            .iter()
+            .position(|&b| b as char == s)
+            .ok_or_else(|| anyhow!("illegal suit '{s}' in card '{c}'"))?;
+        if parsed.contains(&(ri, si)) {
+            bail!("duplicate card '{r}{s}'");
+        }
+        parsed.push((ri, si));
+    }
+    parsed.sort_by(|a, b| b.cmp(a));
+    let fmt = |(ri, si): (usize, usize)| {
+        format!("{}{}", RANKS[ri] as char, SUITS[si] as char)
+    };
+    Ok([fmt(parsed[0]), fmt(parsed[1]), fmt(parsed[2])])
 }
 
 /// Deterministic key for a spot under a given bet tree: `<depth>bb_<board>_<street>_<bet_tree_id>`.

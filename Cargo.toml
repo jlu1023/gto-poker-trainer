@@ -40,6 +40,7 @@ gto-engine = { path = "crates/engine" }
 gto-preflop = { path = "crates/preflop" }
 gto-validate = { path = "crates/validate" }
 gto-store = { path = "crates/store" }
+gto-history = { path = "crates/history" }
 
 [profile.release]
 # the solver is RAM- and compute-heavy; keep release fully optimized
