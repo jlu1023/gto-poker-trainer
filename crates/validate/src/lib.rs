@@ -20,6 +20,8 @@
 //! The opensolver (UPI) external cross-check remains future work. The curated stored matrix IS
 //! the benchmark set, so each stored solve is a validation entry.
 
+pub mod advisory;
+
 use anyhow::{anyhow, bail, Result};
 use gto_config::Config;
 use gto_engine::{compute_exploitability, NodeStrategy, PostFlopGame, SolverAction, Spot, SpotSolution};

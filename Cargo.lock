@@ -373,7 +373,9 @@ dependencies = [
  "anyhow",
  "gto-config",
  "gto-engine",
+ "gto-history",
  "gto-preflop",
+ "gto-store",
  "rs_poker",
 ]
 

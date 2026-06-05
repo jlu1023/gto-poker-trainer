@@ -325,6 +325,21 @@ pub fn query_node(solution: &mut SpotSolution, query: &NodeQuery) -> Result<Node
     read_node(&mut solution.game, query)
 }
 
+/// Normalized reach weights for the acting player at a node (the weight of each hand in
+/// `NodeStrategy.hands`, strategy-reach plus card removal). Same F5-correct navigation as
+/// `read_node`; used for range-weighted aggregates (e.g. the advisory theory checks).
+pub fn read_node_weights(game: &mut PostFlopGame, query: &NodeQuery) -> Result<Vec<f32>> {
+    game.back_to_root();
+    walk_path(game, &query.path)?;
+    if game.is_chance_node() || game.is_terminal_node() {
+        bail!("cannot read weights at a chance/terminal node");
+    }
+    game.cache_normalized_weights();
+    let weights = game.normalized_weights(game.current_player()).to_vec();
+    game.back_to_root();
+    Ok(weights)
+}
+
 /// Read the strategy / EV / equity at whatever node the game is currently positioned on.
 /// `ev_per_action` is left empty here; `read_root` fills it for the root.
 fn read_current_node(game: &mut PostFlopGame) -> Result<NodeStrategy> {

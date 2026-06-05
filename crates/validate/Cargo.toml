@@ -15,3 +15,7 @@ anyhow.workspace = true
 [dev-dependencies]
 # the suit_isomorphism example builds real spots from the authored ranges
 gto-preflop.workspace = true
+# the theory_advisory example loads stored spots and reuses the Phase 5 texture buckets
+# (store's and history's gto-validate edges are dev-only, so no dependency cycle)
+gto-store.workspace = true
+gto-history.workspace = true
