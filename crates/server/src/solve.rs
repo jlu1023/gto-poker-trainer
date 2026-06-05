@@ -213,7 +213,7 @@ fn solve_store_contract(
         let _ = tx.try_send(Update::Progress(p));
     };
 
-    let (solution, used_cfg, shrunk) = match solve_spot_streaming(spot, &cfg.solve, progress) {
+    let (mut solution, used_cfg, shrunk) = match solve_spot_streaming(spot, &cfg.solve, progress) {
         Ok(s) => (s, cfg.clone(), false),
         Err(e) if e.to_string().contains("ceiling") => {
             // shrink the flop tree to a single size and retry (noted in the response)
@@ -230,7 +230,8 @@ fn solve_store_contract(
     };
 
     // invariants gate BEFORE caching or returning: never serve or store an unvalidated solve
-    let report = check_invariants(&solution, &used_cfg);
+    // (&mut: the game-layer checks navigate the tree and return it to root)
+    let report = check_invariants(&mut solution, &used_cfg);
     if !report.passed() {
         anyhow::bail!("solve completed but failed invariants: {:?}", report.notes);
     }

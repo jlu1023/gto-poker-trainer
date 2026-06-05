@@ -11,3 +11,7 @@ gto-engine.workspace = true
 # independent hand evaluation / equity for the external cross-check (Phase 1 onward)
 rs_poker.workspace = true
 anyhow.workspace = true
+
+[dev-dependencies]
+# the suit_isomorphism example builds real spots from the authored ranges
+gto-preflop.workspace = true

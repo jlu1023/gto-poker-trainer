@@ -37,7 +37,7 @@ fn main() -> Result<()> {
     let key = spot_key(&spot, &cfg.solve.bet_tree);
     println!("Solving smoke spot: {key}");
 
-    let solution = solve_spot(&spot, &cfg.solve)?;
+    let mut solution = solve_spot(&spot, &cfg.solve)?;
     println!(
         "Converged: exploitability {:.4} chips ({:.4}% of pot) in {} iterations",
         solution.exploitability_chips,
@@ -48,10 +48,16 @@ fn main() -> Result<()> {
     print_root(&solution);
 
     // internal invariants
-    let report = gto_validate::check_invariants(&solution, &cfg);
+    let report = gto_validate::check_invariants(&mut solution, &cfg);
     println!(
-        "Invariants: exploitability_ok={} strategy_normalized={} (max norm error {:.2e})",
-        report.exploitability_ok, report.strategy_normalized, report.max_normalization_error
+        "Invariants: exploitability_ok={} strategy_normalized={} zero_sum_ok={} \
+         tree_normalized={} best_response_ok={} (max norm error {:.2e})",
+        report.exploitability_ok,
+        report.strategy_normalized,
+        report.zero_sum_ok,
+        report.tree_normalized,
+        report.best_response_ok,
+        report.max_normalization_error
     );
     for note in &report.notes {
         println!("  note: {note}");

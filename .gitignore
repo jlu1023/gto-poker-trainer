@@ -1,5 +1,7 @@
 # build artifacts
 /target
+# python bytecode from the verifiers importing verifier_boards
+__pycache__/
 
 # smoke / engine JSON output
 /out

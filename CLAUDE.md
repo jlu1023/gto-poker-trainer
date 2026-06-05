@@ -39,9 +39,13 @@ Seven crates under `crates/`:
 - `engine`  (`gto-engine`)  - `Spot` model, spot-to-solver mapping, `solve_spot` /
   `solve_spot_streaming`, `query_node`.
 - `preflop` (`gto-preflop`) - HU preflop range provider (authored `data/hu_ranges.toml`).
-- `validate`(`gto-validate`)- internal invariants + `rs_poker` equity cross-check.
+- `validate`(`gto-validate`)- internal invariants (six-check `check_invariants` gate: exploitability
+  target, root + full-tree strategy normalization, per-action EV consistency, root zero-sum,
+  best-response recheck) + `rs_poker` equity cross-check; example `suit_isomorphism` (on-demand,
+  two fresh solves).
 - `store`   (`gto-store`)   - precompute-and-cache: serialize solved trees + manifest; the shared
-  viz contract (`gto_store::viz`); examples `smoke` / `build_matrix` / `export_viz`.
+  viz contract (`gto_store::viz`); examples `smoke` / `build_matrix` / `export_viz` /
+  `validate_matrix` (re-run the full invariant gate over every stored spot).
 - `server`  (`gto-server`)  - Phase 3 localhost solve-on-demand binary: POST a flop, SSE streams
   convergence, the matrix is the cache. Phase 4/5 endpoints: trainer setup/grade, review
   ingest/grade/report.

@@ -56,10 +56,10 @@ fn main() -> Result<()> {
         println!("\n[{}] solving {}", summaries.len() + 1, base_key);
 
         // solve, with a RAM-ceiling shrink fallback (abort condition handling)
-        let (solution, used_cfg, shrunk) = solve_with_shrink(&spot, &cfg)?;
+        let (mut solution, used_cfg, shrunk) = solve_with_shrink(&spot, &cfg)?;
 
-        // internal invariants
-        let report = gto_validate::check_invariants(&solution, &used_cfg);
+        // internal invariants (&mut: the game-layer checks navigate the tree)
+        let report = gto_validate::check_invariants(&mut solution, &used_cfg);
         if !report.passed() {
             bail!("invariants failed for {}: {:?}", base_key, report.notes);
         }
