@@ -20,7 +20,8 @@ use serde::{Deserialize, Serialize};
 const OPEN_BAND_BB: (f64, f64) = (2.3, 2.7);
 const DEPTH_BUCKETS: [u32; 2] = [50, 100];
 const DEPTH_TOLERANCE: f64 = 0.07;
-/// srp-v1 flop sizes as fractions of pot.
+/// SRP-tree flop OPENING sizes as fractions of pot (the graded root nodes; raise lines,
+/// in-tree since srp-v2, are not graded shapes and never reach this mapping).
 const TREE_SIZES: [(f64, &str); 2] = [(0.33, "Bet(33)"), (0.75, "Bet(75)")];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -266,7 +267,8 @@ pub fn classify_hand(h: &HandRecord, cfg: &ReviewConfig) -> Vec<Classified> {
         let prefix_all_checks = prefix.iter().all(|p| p.kind == ActionKind::Check);
         if !prefix_all_checks {
             push_skip(&mut entries, &mut decision_index, SkipReason::FacingBetOnFlop,
-                "a bet precedes this decision (off-tree prefix; no action translation)".to_string());
+                "a bet precedes this decision (bet-facing flop nodes are not graded node \
+                 shapes; in-tree since srp-v2 but ungraded)".to_string());
             continue;
         }
         // check-only prefix: the node shape is fully determined
@@ -377,7 +379,7 @@ fn map_hero_action(ev: &ActionEvent, pot_bb: f64, cfg: &ReviewConfig) -> Result<
         ActionKind::Check => Ok("Check".to_string()),
         ActionKind::Bet => {
             if ev.all_in {
-                return Err(format!("all-in bet {:.2} bb (no all-in at this node in srp-v1)", ev.amount_bb));
+                return Err(format!("all-in bet {:.2} bb (no all-in at the graded root nodes)", ev.amount_bb));
             }
             let pct = ev.amount_bb / pot_bb;
             for (size, label) in TREE_SIZES {

@@ -67,9 +67,9 @@ impl ValidationReport {
 /// u16-quantization error only); measured residuals on the benchmark are ~1e-4 chips on
 /// 100-chip pots, so 0.1% of pot has ~750x headroom and is ~300x below an F5-class shift.
 const ZERO_SUM_TOL_FRAC_OF_POT: f64 = 0.001;
-/// Tree-walk node backstop. The full srp-v1 flop tree is ~180k decision nodes (~470k total,
-/// ~11 s release); the budget exists only to stop a runaway tree, and a truncated walk FAILS
-/// the invariant (never a silent partial pass).
+/// Tree-walk node backstop. A full SRP flop tree runs ~180-200k decision nodes (~470k+
+/// total, ~11 s release); the budget exists only to stop a runaway tree, and a truncated
+/// walk FAILS the invariant (never a silent partial pass).
 const TREE_WALK_NODE_BUDGET: usize = 2_000_000;
 /// Best-response slack over the convergence target (10%) and drift vs the recorded figure
 /// (25% of target). Measured on the benchmark: recomputed == stored to 4 decimals (drift

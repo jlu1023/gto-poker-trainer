@@ -41,7 +41,12 @@ import verifier_boards
 
 CANDIDATES = verifier_boards.SOLVE_CANDIDATES
 
-SOLVE_WAIT_MS = 240_000  # generous; server-side timeout is 300 s
+# Must EXCEED the server-side cap (phase1.toml io.solve_timeout_secs = 900s) so the gate
+# always observes a terminal SSE state: either 'complete' or the server's own timeout error.
+# The old 240s budget predated srp-v2's ~2.4x trees and died before either terminal state
+# (measured 50bb fresh solves: 130.9s idle, >240s under load; the loaded run's cleanup kill
+# orphaned the finished tree file between file write and manifest update).
+SOLVE_WAIT_MS = 960_000
 
 
 def step_cargo_check():
@@ -78,8 +83,8 @@ def pick_fresh_board():
     if manifest_path.exists():
         cached = set(json.loads(manifest_path.read_text())["spots"].keys())
     for board in CANDIDATES:
-        if f"50bb_{board}_flop_srp-v1" not in cached and \
-           f"50bb_{board}_flop_srp-v1-shrunk" not in cached:
+        if verifier_boards.spot_key(50, board) not in cached and \
+           verifier_boards.spot_key(50, board, "-shrunk") not in cached:
             return board
     return None
 
@@ -191,7 +196,7 @@ def step_e2e(fresh_board):
                     time.sleep(0.5)
             page.wait_for_selector("#solveBtn", timeout=15_000)
 
-            key = f"50bb_{fresh_board}_flop_srp-v1"
+            key = verifier_boards.spot_key(50, fresh_board)
 
             # ---- 3a. fresh solve with real streamed convergence ----
             print(f"  -- fresh solve: {fresh_board} (key {key}) --")
@@ -322,7 +327,7 @@ def step_e2e(fresh_board):
         # ---- 3f. server log: the fresh board was solved exactly once ----
         server_log.flush()
         log_text = SERVER_LOG.read_text(encoding="utf-8")
-        n_solves = log_text.count(f"solving 50bb_{fresh_board}_flop_srp-v1")
+        n_solves = log_text.count(f"solving {verifier_boards.spot_key(50, fresh_board)}")
         if n_solves == 1:
             print(f"  PASS  server log shows exactly 1 solve of {fresh_board} across 2 submits")
         else:

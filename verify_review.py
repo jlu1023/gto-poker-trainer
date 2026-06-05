@@ -188,7 +188,7 @@ def main():
 
     manifest = json.loads((MATRIX_DIR / "manifest.json").read_text())
     pending_board = next(
-        (b for b in PENDING_CANDIDATES if f"50bb_{b}_flop_srp-v1" not in manifest["spots"]), None)
+        (b for b in PENDING_CANDIDATES if verifier_boards.spot_key(50, b) not in manifest["spots"]), None)
     if pending_board is None:
         print("FAIL  no uncached pending candidate left")
         sys.exit(1)
@@ -340,7 +340,7 @@ def main():
 
         # pending board must still be unsolved (zero fresh solves in this gate)
         manifest2 = json.loads((MATRIX_DIR / "manifest.json").read_text())
-        if f"50bb_{pending_board}_flop_srp-v1" not in manifest2["spots"]:
+        if verifier_boards.spot_key(50, pending_board) not in manifest2["spots"]:
             print(f"  PASS  {pending_board} still unsolved (gate ran zero fresh solves)")
         else:
             print(f"  FAIL  {pending_board} was solved during the gate")

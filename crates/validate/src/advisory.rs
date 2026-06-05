@@ -22,12 +22,18 @@
 /// Caveat stated for every report: exact MDF ignores equity realization, future streets,
 /// and card removal, so real GTO defence legitimately sits below the pure floor, and the
 /// legitimate shortfall is POSITION-DEPENDENT (the solver is the ground truth; MDF is the
-/// sanity reference). Measured on the verified benchmark: OOP (BB) defence vs flop c-bets
-/// runs 5.0-16.8 points below the pure floor across normal spots (equity realizes badly out
-/// of position), while IP defence vs BB leads sits AT or ABOVE the floor everywhere (gaps
-/// -24.8 to +4.4 points). Thresholds: OOP flags at a 20-point shortfall (clear of the whole
-/// legitimate 5-17 cluster; the one benchmark outlier at +26.6, 100bb 9c5d3h, stays flagged
-/// as a genuine range signal), IP flags at 10 (IP has no realization excuse).
+/// sanity reference). Measured on the verified srp-v2 benchmark: OOP (BB) defence vs flop
+/// c-bets runs +3.0 to +16.7 points below the pure floor across normal spots (equity
+/// realizes badly out of position), with one borderline outlier at +20.1 (50bb AcKhQd vs
+/// the 33% c-bet: composition-audited legitimate - 100% fold of ~12%-equity air on the one
+/// board that crushes the BB caller, exactly MDF's realization blind spot; it sits 0.1 over
+/// the threshold and stays flagged rather than retuning the threshold to chase it). IP
+/// defence vs BB leads runs -14.2 to +2.4 (at or near the floor everywhere). Thresholds:
+/// OOP flags at a 20-point shortfall, IP at 10 (IP has no realization excuse). Lifecycle
+/// proof the flag class is real: the srp-v1 outlier (+26.6 on 100bb 9c5d3h, later +32.0
+/// under the re-authored ranges) was attributed to a capped BB checking range with no raise
+/// outlet, fixed by the srp-v2 flop check-raise, and now measures +3.0 with the mechanism
+/// confirmed per hand (defence_trace).
 pub const MDF_FLAG_GAP_OOP: f32 = 0.20;
 pub const MDF_FLAG_GAP_IP: f32 = 0.10;
 
@@ -74,11 +80,12 @@ pub fn assess_mdf(
 /// variation is normal and often correct. Err heavily toward not flagging.
 ///
 /// Bands (gross-violation thresholds, calibrated against the verified benchmark so that no
-/// known-good spot flags; benchmark IP c-bet frequencies measured 36.1% (monotone Kh9h4h)
-/// to 97.9% (dry-low 8d6s3c) across textures, every one inside its band and tracking the
-/// expected direction): dry/static textures expect HIGH c-bet, flag only a very low
-/// frequency; wet/dynamic textures legitimately range widely, flag only near-degenerate
-/// extremes.
+/// known-good spot flags; srp-v2 benchmark IP c-bet frequencies measured 36.6% (monotone
+/// Kh9h4h) to 66.3% (paired-low 7h7d2c) across textures, every one inside its band and
+/// tracking the expected direction - the spread narrowed sharply from the raise-less srp-v1
+/// generation, where indiscriminate c-betting peaked at 97.9-100% because no check-raise
+/// punished it): dry/static textures expect HIGH c-bet, flag only a very low frequency;
+/// wet/dynamic textures legitimately range widely, flag only near-degenerate extremes.
 #[derive(Debug, Clone)]
 pub struct CbetAssessment {
     pub texture: String,
@@ -138,7 +145,8 @@ mod tests {
         // 5 points below: well inside OOP equity-realization territory
         let a = assess_mdf(100.0, 33.0, 0.70, true);
         assert!(a.gap > 0.0 && !a.flagged);
-        // 16.8 points below: the top of the measured legitimate benchmark cluster
+        // 16.8 points below: just above the srp-v2 measured cluster top (+16.7, 50bb
+        // AcKhQd vs the 75% bet) and still under the 20-point threshold
         let b = assess_mdf(100.0, 33.0, 0.584, true);
         assert!(!b.flagged);
     }

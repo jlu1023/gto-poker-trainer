@@ -50,7 +50,9 @@ CACHED_100 = verifier_boards.TRAINER_CACHED_100  # solved in Phase 1, stays cach
 FRESH_CANDIDATES = verifier_boards.TRAINER_FRESH
 ABSENT = verifier_boards.TRAINER_ABSENT          # the unsolved-spot 409 fixture
 
-SOLVE_WAIT_MS = 240_000
+# Above the server-side cap (phase1.toml io.solve_timeout_secs = 900s) so the fresh-solve
+# round always sees a terminal SSE state; see verify_solve.py for the srp-v2 measured basis.
+SOLVE_WAIT_MS = 960_000
 
 
 def run_step(name, cmd, cwd, shell=False):
@@ -143,7 +145,7 @@ def step_api_grading():
     print("\n=== 2. Grading correctness (data-driven, via API) ===")
     contracts = {}
     for board, depth in ((CACHED_50, 50), (CACHED_100, 100)):
-        p = DATA_DIR / f"{depth}bb_{board}_flop_srp-v1.json"
+        p = DATA_DIR / f"{verifier_boards.spot_key(depth, board)}.json"
         contracts[(board, depth)] = json.loads(p.read_text())
 
     exemplars = find_band_exemplars(
@@ -210,7 +212,7 @@ def step_api_grading():
     # the absent fixture is registry-guarded (no consumable pool may contain it) and the
     # setup sweep removes any stray solve of it; this assert is defense in depth
     manifest = json.loads((MATRIX_DIR / "manifest.json").read_text())
-    assert f"50bb_{ABSENT}_flop_srp-v1" not in manifest["spots"], "test board unexpectedly cached"
+    assert verifier_boards.spot_key(50, ABSENT) not in manifest["spots"], "test board unexpectedly cached"
 
     for name, path, body, want_status, want_text in cases:
         status, resp = api(path, body)
@@ -236,15 +238,15 @@ def step_ui():
     print("\n=== 3. Trainer UI: commit gate + reveal + both depths + fresh solve ===")
     from playwright.sync_api import sync_playwright
 
-    contract_50 = json.loads((DATA_DIR / f"50bb_{CACHED_50}_flop_srp-v1.json").read_text())
-    contract_100 = json.loads((DATA_DIR / f"100bb_{CACHED_100}_flop_srp-v1.json").read_text())
+    contract_50 = json.loads((DATA_DIR / f"{verifier_boards.spot_key(50, CACHED_50)}.json").read_text())
+    contract_100 = json.loads((DATA_DIR / f"{verifier_boards.spot_key(100, CACHED_100)}.json").read_text())
 
     # pick a guaranteed-present hand on the 100bb board (mid-range row from the real data)
     hand_100 = contract_100["hands"][len(contract_100["hands"]) // 2]["hand"]
 
     manifest = json.loads((MATRIX_DIR / "manifest.json").read_text())
     fresh = next((b for b in FRESH_CANDIDATES
-                  if f"50bb_{b}_flop_srp-v1" not in manifest["spots"]), None)
+                  if verifier_boards.spot_key(50, b) not in manifest["spots"]), None)
     if fresh is None:
         print("  FAIL  no un-cached fresh candidate left; extend FRESH_CANDIDATES")
         return False

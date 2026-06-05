@@ -76,13 +76,16 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
 - Smoke (from repo root): `cargo run --release -p gto-store --example smoke`
   Converges below target, proves the store round-trip, writes `out/smoke.json` and a `matrix/` entry.
 - Curated matrix (Phase 1, from repo root): `cargo run --release -p gto-store --example build_matrix`
-  Solves the curated benchmark (`benchmark/spots.toml`) with the `srp-v1` tree (`phase1.toml`), asserts
-  invariants, stores each spot, and runs the rs_poker equity cross-check. Preflop ranges are authored
-  in-repo (`crates/preflop/data/hu_ranges.toml`); the curated stored set IS the validation benchmark.
+  Solves the curated benchmark (`benchmark/spots.toml`) with the `srp-v2` tree (`phase1.toml`: flop
+  33%/75% bets + one "3x" check-raise size both players, single turn/river size, no turn/river
+  raises), asserts invariants, stores each spot, and runs the rs_poker equity cross-check. Preflop
+  ranges are authored in-repo (`crates/preflop/data/hu_ranges.toml`, fractional weights since the
+  2026-06-05 re-authoring); the curated stored set IS the validation benchmark. The gate-side tree
+  id / spot-key format is single-sourced in `verifier_boards.py` (`TREE_ID`, `spot_key()`).
 - Viz export (Phase 2, from repo root): `cargo run --release -p gto-store --example export_viz`
   writes `viz/public/data/*.json`; then `npm run dev` (or `build`) inside `viz/`.
 - Solve server (Phase 3+4, from repo root): `cargo run --release -p gto-server`
-  Listens on `127.0.0.1:7474` (SRP, depths with authored ranges: 50/100bb; tree `srp-v1`; loads
+  Listens on `127.0.0.1:7474` (SRP, depths with authored ranges: 50/100bb; tree `srp-v2`; loads
   `phase1.toml`). Endpoints: `/api/health`, `/api/solve` (SSE; depth in the body), `/api/setup`
   (trainer pre-commit: legal actions + hand-in-range, no strategy data), `/api/grade` (verdict
   for a committed action; bands from `[trainer]` config).

@@ -17,8 +17,8 @@ overlap structurally impossible and makes the pools drain-proof:
 Every verify_*.py calls prepare(REPO) before starting its server. Run this file directly to
 check the partitions and print the table: python verifier_boards.py
 
-Partition semantics (boards are bare canonical flops; gate keys derive as
-{depth}bb_{board}_flop_srp-v1):
+Partition semantics (boards are bare canonical flops; gate keys derive via spot_key() as
+{depth}bb_{board}_flop_{TREE_ID}):
 - EXPECTED_CACHED: stable fixtures that must stay in the matrix (Phase 1/3 batch + the viz
   static exports + the smoke board). Shared freely across gates; NEVER swept.
 - SOLVE_CANDIDATES: verify_solve's fresh-solve pool (one consumed per run, swept back out).
@@ -33,6 +33,16 @@ from pathlib import Path
 
 RANKS = "AKQJT98765432"
 SUITS_DESC = "shdc"  # canonical suit order within a rank tie (matches gto-store)
+
+# The bet tree the gates solve and expect: the SINGLE source for every key literal in the
+# gate harness (phase1.toml's bet_tree_id must match). Changing trees costs this one
+# constant, not a grep-and-replace - the same structural move as the board registry itself.
+TREE_ID = "srp-v2"
+
+
+def spot_key(depth, board, variant: str = "") -> str:
+    """The canonical gate-side spot key: {depth}bb_{board}_flop_{TREE_ID}{variant}."""
+    return f"{depth}bb_{board}_flop_{TREE_ID}{variant}"
 
 EXPECTED_CACHED = [
     "6c5d4h", "7h7d2c", "9c5d3h", "Jc9h8c", "Kh9h4h", "Ks7h2c",  # 100bb batch
@@ -108,7 +118,7 @@ def sweep(repo_root) -> list:
     for board in sweepable:
         for depth in (50, 100):
             for variant in ("", "-shrunk"):
-                key = f"{depth}bb_{board}_flop_srp-v1{variant}"
+                key = spot_key(depth, board, variant)
                 if key in manifest["spots"]:
                     del manifest["spots"][key]
                     removed.append(key)

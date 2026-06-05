@@ -236,6 +236,43 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   identity + no-dominant-unplayed-action checks are promoted into check_invariants (audit
   follow-up priority 1), so fresh solves inherit the guard at the gate.
 
+## Range + tree revision decisions (2026-06-05, operator-approved)
+
+- **D46. BB defend ranges re-authored with fractional weights (3-bet-mix top).** The SRP
+  range audit traced the advisory flags to the authored BB ranges (~34% of hands, top-heavy,
+  no low-board coverage). New construction (commit 1e805da): 59.4%/53.5% weighted continue at
+  100/50bb; premiums enter the SRP call range at reduced weight (AA/KK 0.25, QQ/AK 0.5,
+  JJ/AQ 0.75 - real SRP pots are capped); coarse {1, .75, .5, .25} grid; IP unchanged. The
+  coupled range-weight plumbing closed audit follow-up #3 (HandEntry.weight = authored mass,
+  weight-correct grid, review guard w > 0). ACCEPTANCE HYPOTHESIS FALSIFIED: the advisory
+  gaps WIDENED, because a capped BB cannot be defended without a check-raise and srp-v1 had
+  no raise lines. Kept by operator decision with the falsified hypothesis on record.
+- **D47. Bet tree `srp-v2` = srp-v1 + ONE flop raise size ("3x", both players).** The
+  binding fix for D46's outcome: the check-raise line the capped BB needs. "3x" = raise-TO
+  three times the facing bet (Bet(33) -> Raise(99), Bet(75) -> Raise(225)); the grammar is
+  PINNED by an engine unit test BEFORE the benchmark was rebuilt on it (the F5 discipline
+  applied to a config value). Turn/river raises deferred to the 3-bet phase. Tree ids and
+  spot keys are now single-sourced in the gate harness (`verifier_boards.TREE_ID` +
+  `spot_key()`), killing the ~12-literal drift class the id change would otherwise create.
+  Acceptance is MECHANISTIC (operator amendment): the per-hand defence trace must show the
+  classes that folded under srp-v1 taking the Raise line; the advisory re-run is
+  corroboration only, never the pass condition.
+  OUTCOME (2026-06-05): PASS, mechanism confirmed per hand (`defence_trace`, srp-v1 baseline
+  traced from the archive with the same tool). The srp-v1 defect was a CAPPED checking range:
+  strong classes avoided the check line entirely (air = 67.0% of the BB's mass at
+  [Check, Bet(33)] on 100bb 9c5d3h) or check-called passively, and the air-heavy node folded
+  56.8%. Under srp-v2 the strong classes return to the check line (air share 32.7%; set/top
+  pair/draw shares roughly double) and raise actively (sets 100%, overpairs 79.6%, draws
+  40.2%, top pair 33.3%; 358 hands raise >= 5%); aggregate fold 56.8% -> 27.8% (Bet 33) and
+  69.0% -> 46.2% (Bet 75). Corroboration: advisory gaps 9c5d3h +32.0 -> +3.0, 7h7d2c
+  +27.1 -> +12.4, c-bet 100% -> 56.3% (the raise threat repriced indiscriminate c-betting).
+  Honesty notes: (1) the plan's tree-size estimate (+5-8% nodes) was wrong - measured ~2.4x
+  (180k -> 427k decision nodes per 100bb spot); harmless direction, zero shrinks, all
+  invariants green. (2) One NEW borderline advisory flag: 50bb AcKhQd BB vs Bet(33) at
+  +20.1, composition-audited legitimate (100% fold of ~12%-equity air on the one
+  BB-crushed board - MDF's realization blind spot); threshold deliberately NOT retuned in
+  the acceptance commit, left flagged for an operator calibration call.
+
 ## Phase 4 findings
 
 - **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,

@@ -91,14 +91,19 @@ fn main() -> Result<()> {
     );
 
     let cfg = Config::load("phase1.toml").context("loading phase1.toml")?;
+    let tree_suffix = format!("_{}", cfg.solve.bet_tree.bet_tree_id);
     let manifest = load_manifest(Path::new(&cfg.io.matrix_dir))?;
     let mut keys: Vec<&String> = manifest
         .spots
         .keys()
-        .filter(|k| k.ends_with("_srp-v1"))
+        .filter(|k| k.ends_with(&tree_suffix))
         .collect();
     keys.sort();
-    println!("{} stored srp-v1 spot(s); cached reads only, nothing is solved\n", keys.len());
+    println!(
+        "{} stored {} spot(s); cached reads only, nothing is solved\n",
+        keys.len(),
+        cfg.solve.bet_tree.bet_tree_id
+    );
 
     let mut total_flags = 0usize;
 

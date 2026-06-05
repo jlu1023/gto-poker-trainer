@@ -1,64 +1,64 @@
 {
   "spots": [
     {
-      "key": "100bb_6c5d4h_flop_srp-v1",
+      "key": "100bb_6c5d4h_flop_srp-v2",
       "board": [
         "6c",
         "5d",
         "4h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0044147195
+      "exploitability_pct_pot": 0.0044270875
     },
     {
-      "key": "100bb_7h7d2c_flop_srp-v1",
+      "key": "100bb_7h7d2c_flop_srp-v2",
       "board": [
         "7h",
         "7d",
         "2c"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0046250676
+      "exploitability_pct_pot": 0.004408021
     },
     {
-      "key": "100bb_9c5d3h_flop_srp-v1",
+      "key": "100bb_9c5d3h_flop_srp-v2",
       "board": [
         "9c",
         "5d",
         "3h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0048764325
+      "exploitability_pct_pot": 0.004580655
     },
     {
-      "key": "100bb_Jc9h8c_flop_srp-v1",
+      "key": "100bb_Jc9h8c_flop_srp-v2",
       "board": [
         "Jc",
         "9h",
         "8c"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0036625909
+      "exploitability_pct_pot": 0.004578559
     },
     {
-      "key": "100bb_Kh9h4h_flop_srp-v1",
+      "key": "100bb_Kh9h4h_flop_srp-v2",
       "board": [
         "Kh",
         "9h",
         "4h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.00423707
+      "exploitability_pct_pot": 0.0040529585
     },
     {
-      "key": "100bb_Ks7h2c_flop_srp-v1",
+      "key": "100bb_Ks7h2c_flop_srp-v2",
       "board": [
         "Ks",
         "7h",
         "2c"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0048838807
+      "exploitability_pct_pot": 0.004949436
     },
     {
       "key": "100bb_Td9d6h_flop_smoke-v0",
@@ -71,34 +71,34 @@
       "exploitability_pct_pot": 0.0034758472
     },
     {
-      "key": "50bb_8d6s3c_flop_srp-v1",
+      "key": "50bb_8d6s3c_flop_srp-v2",
       "board": [
         "8d",
         "6s",
         "3c"
       ],
       "stack_depth_bb": 50,
-      "exploitability_pct_pot": 0.004561529
+      "exploitability_pct_pot": 0.0047102235
     },
     {
-      "key": "50bb_AcKhQd_flop_srp-v1",
+      "key": "50bb_AcKhQd_flop_srp-v2",
       "board": [
         "Ac",
         "Kh",
         "Qd"
       ],
       "stack_depth_bb": 50,
-      "exploitability_pct_pot": 0.0045589064
+      "exploitability_pct_pot": 0.0044486905
     },
     {
-      "key": "50bb_Qs8s5h_flop_srp-v1",
+      "key": "50bb_Qs8s5h_flop_srp-v2",
       "board": [
         "Qs",
         "8s",
         "5h"
       ],
       "stack_depth_bb": 50,
-      "exploitability_pct_pot": 0.0047756815
+      "exploitability_pct_pot": 0.0044614696
     }
   ]
 }

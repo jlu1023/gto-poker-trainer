@@ -9,12 +9,15 @@ max_iterations = 1000
 print_progress = false
 
 [solve.bet_tree]
-bet_tree_id = "srp-v1"
-# Two flop sizes (richer than smoke-v0's single size), single turn/river size, no raises.
+bet_tree_id = "srp-v2"
+# Two flop sizes, single turn/river size. srp-v2 adds ONE flop raise size for both players
+# ("3x" = raise-TO three times the facing bet, grammar pinned by the engine unit test
+# raise_3x_resolves_to_three_times_the_facing_bet): the check-raise line the capped BB
+# defend range needs. Turn/river raises stay off (future work tied to the 3-bet phase).
 flop_bet_sizes = ["33%, 75%", "33%, 75%"]
 turn_bet_sizes = ["75%", "75%"]
 river_bet_sizes = ["75%", "75%"]
-flop_raise_sizes = ["", ""]
+flop_raise_sizes = ["3x", "3x"]
 turn_raise_sizes = ["", ""]
 river_raise_sizes = ["", ""]
 
@@ -25,6 +28,17 @@ add_allin_threshold = 1.5
 force_allin_threshold = 0.15
 merging_threshold = 0.1
 ram_ceiling_gb = 8.0
+
+[io]
+# Hard wall-clock cap on one on-demand solve. The 300s default was calibrated on srp-v1
+# trees; srp-v2's raise subtrees grew trees ~2.4x (180k -> 427k decision nodes at 100bb)
+# and solve+store times with them. Measured: batch-path 66-249s per spot; server-path 50bb
+# fresh solves 130.9s on an idle machine and >240s under load (that run outlived its gate's
+# 240s client budget, orphaning the finished tree file mid-manifest-write). 900s is a
+# runaway cap with load headroom, not a performance target. Gate client budgets
+# (verify_solve/verify_trainer SOLVE_WAIT_MS) must stay ABOVE this so a gate always
+# observes a terminal SSE state (complete, or this cap's error) instead of dying first.
+solve_timeout_secs = 900
 
 [store]
 use_zstd = true

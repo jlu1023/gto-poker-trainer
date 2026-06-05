@@ -484,3 +484,74 @@ fn board_state(s: Street) -> BoardState {
         Street::River => BoardState::River,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gto_config::SolveConfig;
+
+    /// Grammar pre-flight for srp-v2 (operator amendment): "3x" must resolve to raise-TO
+    /// three times the facing bet (Bet(33) -> Raise(99), Bet(75) -> Raise(225)), NOT
+    /// raise-BY. Pinned at the data layer BEFORE the benchmark was rebuilt on it - the F5
+    /// discipline applied to a config value: a plausible number resting on a grammar
+    /// assumption gets confirmed cheaply before anything expensive is built on top.
+    #[test]
+    fn raise_3x_resolves_to_three_times_the_facing_bet() {
+        let spot = Spot {
+            stack_depth_bb: 100,
+            initial_street: Street::Flop,
+            board: Board {
+                flop: ["Ks".into(), "7h".into(), "2c".into()],
+                turn: None,
+                river: None,
+            },
+            pot_bb: 5.0,
+            effective_stack_bb: 97.5,
+            // tiny ranges: the action tree does not depend on ranges, keep the build instant
+            oop_range: "AA".into(),
+            ip_range: "KK".into(),
+            rake: RakeSpec::default(),
+        };
+        let mut cfg = SolveConfig::default();
+        cfg.bet_tree.flop_bet_sizes = ["33%, 75%".into(), "33%, 75%".into()];
+        cfg.bet_tree.flop_raise_sizes = ["3x".into(), "3x".into()];
+
+        let card_config = build_card_config(&spot).unwrap();
+        let tree_config = build_tree_config(&spot, &cfg).unwrap();
+        let action_tree = ActionTree::new(tree_config).unwrap();
+        let mut game = PostFlopGame::with_config(card_config, action_tree).unwrap();
+        game.allocate_memory(false); // tiny tree; navigation only
+
+        let labels = |game: &PostFlopGame| -> Vec<String> {
+            game.available_actions().iter().map(render_action).collect()
+        };
+        let play = |game: &mut PostFlopGame, label: &str| {
+            let acts = labels(game);
+            let idx = acts
+                .iter()
+                .position(|a| a == label)
+                .unwrap_or_else(|| panic!("action {label} not in {acts:?}"));
+            game.play(idx);
+        };
+
+        // BB checks, BTN bets 33 into 100: the check-raise must be Raise(99) = raise-to 3x
+        play(&mut game, "Check");
+        play(&mut game, "Bet(33)");
+        let facing_33 = labels(&game);
+        assert!(
+            facing_33.contains(&"Raise(99)".to_string()),
+            "vs Bet(33) expected Raise(99) (raise-TO 3x the bet); got {facing_33:?}"
+        );
+        assert!(facing_33.contains(&"Fold".to_string()) && facing_33.contains(&"Call".to_string()));
+
+        // and vs the 75 bet: Raise(225)
+        game.back_to_root();
+        play(&mut game, "Check");
+        play(&mut game, "Bet(75)");
+        let facing_75 = labels(&game);
+        assert!(
+            facing_75.contains(&"Raise(225)".to_string()),
+            "vs Bet(75) expected Raise(225); got {facing_75:?}"
+        );
+    }
+}

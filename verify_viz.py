@@ -5,12 +5,12 @@ Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.
 
 Since the SPOT preset dropdown was removed, the solve cluster (depth select + board input +
 Solve) is the single spot entry, so this gate drives it. Preconditions: a built
-target/release/gto-server.exe and a populated matrix/ (the srp-v1 fixtures listed in
-viz/public/data/index.json must be cached). Each fixture load MUST terminate "cached" with
-zero progress events: the gate now also guards that presets never silently re-solve.
-Rendering is still reconciled against the static exports in viz/public/data/*.json.
-The smoke-v0 spot is out of gate scope: the cluster only forms srp-v1 keys, so a smoke-v0
-tree entry is unreachable from the UI (it remains in the matrix).
+target/release/gto-server.exe and a populated matrix/ (the current-tree fixtures listed in
+viz/public/data/index.json must be cached; the tree id comes from verifier_boards.TREE_ID).
+Each fixture load MUST terminate "cached" with zero progress events: the gate also guards
+that presets never silently re-solve. Rendering is still reconciled against the static
+exports in viz/public/data/*.json. The smoke-v0 spot is out of gate scope: the cluster only
+forms current-tree keys, so a smoke-v0 entry is unreachable from the UI (it stays cached).
 """
 
 import json
@@ -98,19 +98,21 @@ def step_playwright():
     print("\n=== 3. Playwright rendering checks (cluster-driven, cache hits only) ===")
     from playwright.sync_api import sync_playwright
 
-    # the fixture set: srp-v1 entries of the static export index that the registry reserves
-    # as expected-cached. Non-reserved boards (gate-run state in a future re-export) and the
-    # smoke-v0 tree (unreachable through the cluster) are skipped WITH a note, never silently.
+    # the fixture set: current-tree entries of the static export index that the registry
+    # reserves as expected-cached. Non-reserved boards (gate-run state in a future re-export)
+    # and other tree ids (e.g. smoke-v0, unreachable through the cluster) are skipped WITH a
+    # note, never silently.
+    tree = verifier_boards.TREE_ID
     index = json.loads((DATA_DIR / "index.json").read_text())
     reserved = set(verifier_boards.EXPECTED_CACHED)
     fixtures = [s for s in index["spots"]
-                if s["key"].endswith("_srp-v1") and "".join(s["board"]) in reserved]
+                if s["key"].endswith(f"_{tree}") and "".join(s["board"]) in reserved]
     skipped = [s["key"] for s in index["spots"] if s not in fixtures]
     if skipped:
         print(f"  note: {len(skipped)} index entr{'y' if len(skipped) == 1 else 'ies'} outside "
-              f"the registry's expected-cached srp-v1 set, skipped: {', '.join(skipped)}")
+              f"the registry's expected-cached {tree} set, skipped: {', '.join(skipped)}")
     if not fixtures:
-        print("  FAIL  no registry-reserved srp-v1 fixtures in data/index.json")
+        print(f"  FAIL  no registry-reserved {tree} fixtures in data/index.json")
         return False
 
     SERVER_LOG.parent.mkdir(exist_ok=True)
@@ -154,7 +156,7 @@ def step_playwright():
                     time.sleep(0.5)
 
             page.wait_for_selector("#solveBtn", timeout=15000)
-            print(f"  {len(fixtures)} srp-v1 fixtures from data/index.json")
+            print(f"  {len(fixtures)} {tree} fixtures from data/index.json")
 
             # ---- per-spot rendering checks ----
             for entry in fixtures:
@@ -213,7 +215,7 @@ def step_playwright():
                     ok = False
 
             # ---- equity spot-check and aggregation reconciliation: 100bb_Ks7h2c ----
-            ks_key = "100bb_Ks7h2c_flop_srp-v1"
+            ks_key = verifier_boards.spot_key(100, "Ks7h2c")
             print(f"\n  -- equity + aggregation spot-check: {ks_key} --")
 
             with open(DATA_DIR / f"{ks_key}.json") as f:

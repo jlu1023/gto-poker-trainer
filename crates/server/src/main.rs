@@ -23,9 +23,10 @@ use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // phase1.toml = the srp-v1 tree, the same config the batch runner uses, so on-demand spot
-    // keys are interchangeable with the Phase 1 benchmark entries. Fail fast if missing: a
-    // defaulted config would silently solve under the wrong tree id and split the cache.
+    // phase1.toml = the current SRP tree (srp-v2), the same config the batch runner uses, so
+    // on-demand spot keys are interchangeable with the benchmark entries. Fail fast if
+    // missing: a defaulted config would silently solve under the wrong tree id and split the
+    // cache.
     let cfg = Config::load("phase1.toml")
         .context("loading phase1.toml (run the server from the repo root)")?;
     let charts = PreflopCharts::load_embedded().context("loading embedded preflop charts")?;
@@ -40,6 +41,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let timeout_secs = cfg.io.solve_timeout_secs;
+    let tree_id = cfg.solve.bet_tree.bet_tree_id.clone();
     let app_state = AppState::new(cfg, charts);
 
     // the Vite dev server is a different origin; localhost-only, no credentials -> permissive CORS
@@ -64,7 +66,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("binding {addr} (is another gto-server running?)"))?;
     println!(
-        "gto-server on http://{addr}  (50bb SRP solve-on-demand, tree srp-v1, \
+        "gto-server on http://{addr}  (SRP solve-on-demand, tree {tree_id}, \
          solve timeout {timeout_secs}s)"
     );
     axum::serve(listener, app).await?;
