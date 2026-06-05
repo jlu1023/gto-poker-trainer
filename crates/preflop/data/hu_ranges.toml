@@ -1,18 +1,28 @@
-# Authored heads-up preflop ranges (Phase 1).
+# Authored heads-up preflop ranges (Phase 1; BB defend ranges re-authored after the SRP
+# range audit - see the vault note "SRP range audit - advisory flag attribution").
 #
-# These are OUR data, authored from established HU GTO theory (HU BTN/SB opens very wide; BB defends
-# wide), not lifted from any licensed chart pack. They are reasonable approximations sufficient for
-# the curated benchmark; the postflop solve is robust to small preflop range-edge differences. Refine
-# later. Tokens use standard notation accepted by both postflop-solver and rs_poker.
+# These are OUR data, authored from established HU GTO theory, not lifted from any licensed
+# chart pack. Tokens use the postflop-solver notation; entries may carry fractional weights
+# ("AA:0.25"), and groups are written NON-OVERLAPPING (one weight per class).
 #
-# Keyed [<node>.<stack_depth_bb>]. `oop` = the OOP postflop player (BB), `ip` = the IP postflop player
-# (BTN). For a single-raised pot these are the ranges entering the flop: BB's calling range vs a BTN
-# open (oop) and the BTN opening range that got called (ip).
+# BB defend construction (oop): the BB closes preflop getting 1.5:3.5 (30% raw) vs the 2.5x
+# open, so the binding constraint is OOP realization, not raw odds. The TOP models the 3-bet
+# mix (premiums enter the SRP flop range at reduced weight: AA/KK 0.25, QQ/AK 0.5, JJ/AQ
+# 0.75) so the SRP-entering range is realistically de-weighted at the nut end. The BOTTOM
+# carries the low-board coverage the audit found missing (low offsuit connectors, low suited
+# gappers, weak Ax-offsuit) at partial weights - the genuine call/fold mixes. Weight grid is
+# deliberately coarse: {1.0, 0.75, 0.5, 0.25}. Weighted totals: 100bb ~787.5/1326 = 59.4%
+# continue; 50bb ~709/1326 = 53.5% (tempered to the band's low end because the authored BTN
+# open it faces is tighter than typical HU opens).
+#
+# Keyed [<node>.<stack_depth_bb>]. `oop` = the OOP postflop player (BB), `ip` = the IP
+# postflop player (BTN). For a single-raised pot these are the ranges entering the flop:
+# BB's calling range vs a BTN open (oop) and the BTN opening range that got called (ip).
 
 [srp.100]
-oop = "22+,A2s+,K4s+,Q6s+,J7s+,T7s+,97s+,86s+,75s+,64s+,54s,A7o+,K9o+,QTo+,JTo,T9o,98o"
+oop = "AA:0.25,KK:0.25,QQ:0.5,JJ:0.75,TT-22,AKs:0.5,AQs:0.75,AJs-A2s,KQs-K2s,QJs-Q2s,JTs-J6s,J5s-J2s:0.75,T9s-T6s,T5s-T4s:0.75,T3s-T2s:0.5,98s-96s,95s-92s:0.5,87s-85s,84s-82s:0.5,76s-75s,74s-73s:0.5,65s-64s,63s-62s:0.5,54s,53s-52s:0.5,43s:0.75,42s:0.5,32s:0.5,AKo:0.5,AQo:0.75,AJo-A7o,A6o-A2o:0.75,KQo-K9o,K8o-K5o:0.75,K4o-K2o:0.5,QJo-Q9o,Q8o-Q5o:0.5,Q4o-Q2o:0.25,JTo-J9o,J8o-J7o:0.5,J6o-J5o:0.25,T9o-T8o,T7o:0.75,98o,97o:0.75,96o:0.5,87o,86o:0.75,85o:0.5,76o,75o:0.5,65o:0.75,64o:0.5,54o:0.5"
 ip  = "22+,A2s+,K2s+,Q3s+,J6s+,T6s+,96s+,85s+,75s+,64s+,53s+,43s,A2o+,K6o+,Q8o+,J8o+,T8o+,97o+,87o,76o"
 
 [srp.50]
-oop = "22+,A2s+,K6s+,Q8s+,J8s+,T8s+,97s+,86s+,76s,A8o+,K9o+,QTo+,JTo,T9o"
+oop = "AA:0.25,KK:0.25,QQ:0.5,JJ:0.75,TT-22,AKs:0.5,AQs:0.75,AJs-A2s,KQs-K2s,QJs-Q4s,Q3s-Q2s:0.5,JTs-J6s,J5s-J4s:0.5,T9s-T6s,T5s-T4s:0.5,98s-96s,95s-94s:0.5,87s-85s,84s:0.5,76s-75s,74s:0.5,65s-64s,63s:0.5,54s,53s:0.5,43s:0.5,AKo:0.5,AQo:0.75,AJo-A7o,A6o-A2o:0.75,KQo-K9o,K8o-K5o:0.75,QJo-Q9o,Q8o-Q5o:0.5,JTo-J9o,J8o-J7o:0.5,T9o-T8o,T7o:0.5,98o,97o:0.75,96o:0.5,87o,86o:0.75,85o:0.5,76o:0.75,75o:0.5,65o:0.75,64o:0.5,54o:0.5"
 ip  = "22+,A2s+,K3s+,Q5s+,J7s+,T7s+,97s+,86s+,75s+,64s+,54s,A2o+,K8o+,Q9o+,J9o+,T9o,98o"

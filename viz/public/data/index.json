@@ -8,7 +8,7 @@
         "4h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0041826726
+      "exploitability_pct_pot": 0.0044147195
     },
     {
       "key": "100bb_7h7d2c_flop_srp-v1",
@@ -18,7 +18,7 @@
         "2c"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0046344544
+      "exploitability_pct_pot": 0.0046250676
     },
     {
       "key": "100bb_9c5d3h_flop_srp-v1",
@@ -28,7 +28,7 @@
         "3h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.004458408
+      "exploitability_pct_pot": 0.0048764325
     },
     {
       "key": "100bb_Jc9h8c_flop_srp-v1",
@@ -38,7 +38,7 @@
         "8c"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0038321877
+      "exploitability_pct_pot": 0.0036625909
     },
     {
       "key": "100bb_Kh9h4h_flop_srp-v1",
@@ -48,7 +48,7 @@
         "4h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0041736774
+      "exploitability_pct_pot": 0.00423707
     },
     {
       "key": "100bb_Ks7h2c_flop_srp-v1",
@@ -58,7 +58,7 @@
         "2c"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.004278309
+      "exploitability_pct_pot": 0.0048838807
     },
     {
       "key": "100bb_Td9d6h_flop_smoke-v0",
@@ -68,7 +68,7 @@
         "6h"
       ],
       "stack_depth_bb": 100,
-      "exploitability_pct_pot": 0.0044593513
+      "exploitability_pct_pot": 0.0034758472
     },
     {
       "key": "50bb_8d6s3c_flop_srp-v1",
@@ -78,7 +78,7 @@
         "3c"
       ],
       "stack_depth_bb": 50,
-      "exploitability_pct_pot": 0.004095156
+      "exploitability_pct_pot": 0.004561529
     },
     {
       "key": "50bb_AcKhQd_flop_srp-v1",
@@ -88,7 +88,7 @@
         "Qd"
       ],
       "stack_depth_bb": 50,
-      "exploitability_pct_pot": 0.00416299
+      "exploitability_pct_pot": 0.0045589064
     },
     {
       "key": "50bb_Qs8s5h_flop_srp-v1",
@@ -98,7 +98,7 @@
         "5h"
       ],
       "stack_depth_bb": 50,
-      "exploitability_pct_pot": 0.0048677386
+      "exploitability_pct_pot": 0.0047756815
     }
   ]
 }

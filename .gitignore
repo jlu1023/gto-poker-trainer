@@ -2,6 +2,8 @@
 /target
 # python bytecode from the verifiers importing verifier_boards
 __pycache__/
+# pre-range-fix matrix archive (rollback state for the range re-authoring; delete once srp-v2 settles)
+/matrix.pre-rangefix/
 
 # smoke / engine JSON output
 /out

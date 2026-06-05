@@ -26,6 +26,10 @@ export interface ClassAgg {
   /// Per-action EV means (chips), aligned with actions; empty when the data lacks ev_actions.
   evActions: number[];
   count: number;
+  /// Total range mass of the class: sum of per-combo weights (authored range weight x card
+  /// removal). Equals `count` for weight-1.0 ranges; lower when the class enters the range
+  /// at partial frequency (e.g. 3-bet-mix premiums).
+  mass: number;
   rep: string; // a representative concrete combo, e.g. "AsKs"
 }
 
@@ -40,10 +44,16 @@ export function classOf(hand: string): string {
   return hi + lo + (s0 === s1 ? "s" : "o");
 }
 
+/** Weight-correct class aggregation: each combo contributes by its range mass
+ *  (`HandEntry.weight`, default 1 for old exports). For weight-1.0 ranges this is the exact
+ *  degenerate case of the old plain mean (x1.0 is exact, divisor is the same count). With
+ *  class-uniform fractional weights the within-cell mean is also unchanged (weights cancel);
+ *  the mass still flows for honest display and for any per-combo-weighted future range. */
 function aggregate(spot: SpotContract): Map<string, ClassAgg> {
   const map = new Map<string, ClassAgg>();
   const hasEvActions = spot.hands.every((h) => (h.ev_actions?.length ?? 0) === spot.actions.length);
   for (const h of spot.hands) {
+    const w = h.weight ?? 1;
     const label = classOf(h.hand);
     let agg = map.get(label);
     if (!agg) {
@@ -54,24 +64,27 @@ function aggregate(spot: SpotContract): Map<string, ClassAgg> {
         equity: 0,
         evActions: hasEvActions ? spot.actions.map(() => 0) : [],
         count: 0,
+        mass: 0,
         rep: h.hand,
       };
       map.set(label, agg);
     }
-    for (let a = 0; a < h.strategy.length; a++) agg.strategy[a] += h.strategy[a];
+    for (let a = 0; a < h.strategy.length; a++) agg.strategy[a] += w * h.strategy[a];
     if (hasEvActions) {
-      for (let a = 0; a < spot.actions.length; a++) agg.evActions[a] += h.ev_actions![a];
+      for (let a = 0; a < spot.actions.length; a++) agg.evActions[a] += w * h.ev_actions![a];
     }
-    agg.ev += h.ev;
-    agg.equity += h.equity;
+    agg.ev += w * h.ev;
+    agg.equity += w * h.equity;
     agg.count += 1;
+    agg.mass += w;
   }
-  // convert sums to averages
+  // convert mass-weighted sums to weighted means
   for (const agg of map.values()) {
-    agg.strategy = agg.strategy.map((s) => s / agg.count);
-    agg.evActions = agg.evActions.map((e) => e / agg.count);
-    agg.ev /= agg.count;
-    agg.equity /= agg.count;
+    const m = agg.mass > 0 ? agg.mass : 1;
+    agg.strategy = agg.strategy.map((s) => s / m);
+    agg.evActions = agg.evActions.map((e) => e / m);
+    agg.ev /= m;
+    agg.equity /= m;
   }
   return map;
 }

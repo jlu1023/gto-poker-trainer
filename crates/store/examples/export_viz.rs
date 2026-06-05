@@ -40,8 +40,8 @@ fn main() -> Result<()> {
     // BTreeMap iterates keys in sorted order -> deterministic output
     for (key, _entry) in &manifest.spots {
         match load_solution(key, &cfg) {
-            Ok(solution) => {
-                let contract = build_contract(key, &solution);
+            Ok(mut solution) => {
+                let contract = build_contract(key, &mut solution);
                 let path = out_dir.join(format!("{key}.json"));
                 std::fs::write(&path, serde_json::to_string_pretty(&contract)?)
                     .with_context(|| format!("writing {}", path.display()))?;

@@ -185,7 +185,9 @@ function renderDetail(spot: SpotContract, colors: string[], agg: ClassAgg) {
   detailHost.innerHTML = `
     <div class="detail-head">
       <span class="detail-class">${agg.label}</span>
-      <span class="detail-combos">${agg.count} combo${agg.count > 1 ? "s" : ""} · sample ${agg.rep}</span>
+      <span class="detail-combos">${agg.count} combo${agg.count > 1 ? "s" : ""}${
+        Math.abs(agg.mass - agg.count) > 0.01 ? ` · mass ${agg.mass.toFixed(2)}` : ""
+      } · sample ${agg.rep}</span>
     </div>
     <div class="detail-bars">${bars}</div>
     <div class="detail-stats">

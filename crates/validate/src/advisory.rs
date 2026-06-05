@@ -9,9 +9,10 @@
 //! "worth a look", never a verdict; wiring these as hard gates would false-fire on
 //! legitimate spots until the gate got ignored, and an ignored gate is worse than none.
 //!
-//! Range-weight caveat: aggregates assume weight-1.0 ranges (true for every authored SRP
-//! range today). The open range-weight tripwire (Phase 4 follow-ups) applies here too: if a
-//! fractional-weight range is ever authored, revisit these aggregates in the same breath.
+//! Range weights: the aggregates here weight by `read_node_weights` (the solver's
+//! normalized reach weights), which carry the authored range weight times card removal -
+//! so fractional-weight ranges are range-weight-correct by construction, no separate
+//! handling needed.
 
 /// Check A: minimum-defence-frequency floor. Pure pot-odds arithmetic: facing a bet of
 /// `bet` into `pot`, the defender must continue with at least `pot / (pot + bet)` of their

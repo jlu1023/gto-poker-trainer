@@ -232,20 +232,22 @@ fn grade_batch(
             let n = node.hands.len();
             let n_act = node.actions.len();
 
-            // the known fractional-weight tripwire stays guarded: this phase's math assumes
-            // weight-1.0 ranges, so assert it per instance
+            // Range-weight tripwire, RESOLVED with the fractional-range fix: review grading
+            // and the D44 range-conditioned comparator are per-INSTANCE - each graded hand
+            // is a real event counted once, and the solver's per-combo strategy/EV are
+            // well-defined at any weight > 0. The authored range weight only changes how
+            // often the solver expects to HOLD the combo, which the instance-conditioned
+            // framing never uses. Weight 0 (combo not in the range at all) still rejects.
             let hero_range = match d.node_shape {
                 NodeShape::BbRoot => &solution.spot.oop_range,
                 NodeShape::IpAfterCheck => &solution.spot.ip_range,
             };
             match hand_range_weight(hero_range, &d.combo) {
-                Ok(w) if (w - 1.0).abs() < 1e-6 => {}
-                Ok(w) => {
-                    anyhow::bail!(
-                        "range weight for {} is {w} (not 1.0); fractional-weight ranges \
-                         require the aggregation weight fix first (audit tripwire)",
-                        d.combo
-                    );
+                Ok(w) if w > 0.0 => {}
+                Ok(_) => {
+                    errors.push(json!({ "decision": format!("{}#{}", d.hand_id, d.decision_index),
+                        "error": format!("combo {} has zero weight in the hero range", d.combo) }));
+                    continue;
                 }
                 Err(e) => {
                     errors.push(json!({ "decision": format!("{}#{}", d.hand_id, d.decision_index),

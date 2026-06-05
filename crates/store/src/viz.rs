@@ -6,7 +6,7 @@
 //! The exporter/server reshapes the solver's `strategy[hand + action * n]` layout into clean
 //! per-hand arrays so the front-end never needs to know the solver's memory layout.
 
-use gto_engine::{SpotSolution, Street};
+use gto_engine::{read_root_range_weights, SpotSolution, Street};
 use serde::Serialize;
 
 #[derive(Serialize)]
@@ -31,6 +31,12 @@ pub struct HandEntry {
     /// Per-action EV (chips), aligned with `actions`. Empty when the loaded root predates
     /// per-action EV (old summary sidecars); always filled on fresh reads.
     pub ev_actions: Vec<f32>,
+    /// AUTHORED range mass for this combo (0..1, the raw root weight; board-blocked combos
+    /// are excluded from the list entirely, so card removal lives in membership, not here).
+    /// 1.0 for full-weight combos; fractional for hands the authored range plays at partial
+    /// frequency (e.g. 3-bet-mix premiums). The grid's class aggregation weights by this,
+    /// with weight-1.0 as the exact degenerate case.
+    pub weight: f32,
 }
 
 /// One spot, exactly as the front-end consumes it (`viz/src/types.ts` `SpotContract`).
@@ -50,8 +56,18 @@ pub struct SpotContract {
     pub hands: Vec<HandEntry>,
 }
 
-/// Build the viz contract for a solved spot (root node only at v1).
-pub fn build_contract(key: &str, solution: &SpotSolution) -> SpotContract {
+/// Build the viz contract for a solved spot (root node only at v1). Takes `&mut` because
+/// the root range weights are read off the game (F5-correct `read_node_weights`, which
+/// returns to root after reading).
+pub fn build_contract(key: &str, solution: &mut SpotSolution) -> SpotContract {
+    // authored range mass per combo (0..1; raw root weights - board-blocked combos are
+    // already excluded from the hands list). If the read fails or the shape is unexpected,
+    // fall back to 1.0s (the pre-weight behavior) rather than guess.
+    let weights = read_root_range_weights(&mut solution.game)
+        .ok()
+        .filter(|w| w.len() == solution.root.hands.len())
+        .unwrap_or_else(|| vec![1.0; solution.root.hands.len()]);
+
     let root = &solution.root;
     let n = root.hands.len();
     let num_actions = root.actions.len();
@@ -68,6 +84,7 @@ pub fn build_contract(key: &str, solution: &SpotSolution) -> SpotContract {
             } else {
                 Vec::new()
             },
+            weight: weights[i],
         })
         .collect();
 

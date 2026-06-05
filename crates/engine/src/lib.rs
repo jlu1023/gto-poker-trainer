@@ -325,9 +325,22 @@ pub fn query_node(solution: &mut SpotSolution, query: &NodeQuery) -> Result<Node
     read_node(&mut solution.game, query)
 }
 
+/// The AUTHORED range weight per hand at the root (0..1 per combo: the raw solver weights
+/// before any reach or card-removal normalization). This is the per-combo range mass the
+/// viz contract exports; weight-1.0 ranges read back exactly 1.0. Root-only on purpose:
+/// at deeper nodes the raw weights are reach-multiplied and no longer mean "authored".
+pub fn read_root_range_weights(game: &mut PostFlopGame) -> Result<Vec<f32>> {
+    game.back_to_root();
+    let weights = game.weights(game.current_player()).to_vec();
+    Ok(weights)
+}
+
 /// Normalized reach weights for the acting player at a node (the weight of each hand in
-/// `NodeStrategy.hands`, strategy-reach plus card removal). Same F5-correct navigation as
-/// `read_node`; used for range-weighted aggregates (e.g. the advisory theory checks).
+/// `NodeStrategy.hands`, strategy reach plus card-removal interaction with the villain
+/// range - SCALED for weighted averaging, not 0..1; scale cancels in any sum(w*x)/sum(w)).
+/// Same F5-correct navigation as `read_node`; used for range-weighted aggregates (zero-sum,
+/// the advisory theory checks). NOT the authored range mass - that is
+/// `read_root_range_weights`.
 pub fn read_node_weights(game: &mut PostFlopGame, query: &NodeQuery) -> Result<Vec<f32>> {
     game.back_to_root();
     walk_path(game, &query.path)?;

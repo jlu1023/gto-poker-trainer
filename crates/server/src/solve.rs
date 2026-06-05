@@ -154,8 +154,8 @@ async fn run(
     if let Some((hit_key, shrunk)) = hit {
         let cfg = state.cfg.clone();
         let contract = tokio::task::spawn_blocking(move || {
-            let solution = load_solution(&hit_key, &cfg)?;
-            Ok::<_, anyhow::Error>(build_contract(&hit_key, &solution))
+            let mut solution = load_solution(&hit_key, &cfg)?;
+            Ok::<_, anyhow::Error>(build_contract(&hit_key, &mut solution))
         })
         .await
         .map_err(|e| format!("cache load task failed: {e}"))?
@@ -238,7 +238,8 @@ fn solve_store_contract(
 
     store_solution(&solution, &used_cfg)?;
     let key = spot_key(&solution.spot, &used_cfg.solve.bet_tree);
-    Ok((build_contract(&key, &solution), shrunk))
+    let contract = build_contract(&key, &mut solution);
+    Ok((contract, shrunk))
 }
 
 /// Validate and canonicalize a submitted flop (delegates to the shared gto-store

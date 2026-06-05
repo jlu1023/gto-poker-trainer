@@ -8,6 +8,9 @@ export interface HandEntry {
   /// Per-action EV (chips), aligned with `actions`. May be absent/empty on data exported
   /// before Phase 4.
   ev_actions?: number[];
+  /// Range mass for the combo (authored range weight x card removal). Absent on data
+  /// exported before the range-weight fix; treat as 1.
+  weight?: number;
 }
 
 export interface Seat {

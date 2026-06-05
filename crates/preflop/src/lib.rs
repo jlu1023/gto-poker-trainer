@@ -95,9 +95,7 @@ impl PreflopCharts {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use postflop_solver::Range;
-    use rs_poker::core::Value;
-    use rs_poker::holdem::RangeParser;
+    use postflop_solver::{card_from_str, Range};
 
     fn srp(depth: u32) -> (String, String) {
         PreflopCharts::load_embedded()
@@ -128,25 +126,37 @@ mod tests {
             .is_err());
     }
 
+    /// Weight of a specific combo in a range string, via the authoritative parser (the
+    /// rs_poker parser does not know the weighted ":w" syntax, so membership and weight
+    /// checks both go through postflop-solver).
+    fn w(range: &str, hand: &str) -> f32 {
+        let r: Range = range.parse().unwrap_or_else(|e| panic!("range parse: {e}"));
+        let c1 = card_from_str(&hand[0..2]).unwrap();
+        let c2 = card_from_str(&hand[2..4]).unwrap();
+        r.get_weight_by_cards(c1, c2)
+    }
+
     #[test]
-    fn known_hand_membership() {
-        let (oop, ip) = srp(100);
-        // AA is in both ranges (via "22+").
-        for r in [&oop, &ip] {
-            let combos = RangeParser::parse_many(r).unwrap();
-            assert!(
-                combos
-                    .iter()
-                    .any(|h| h[0].value == Value::Ace && h[1].value == Value::Ace),
-                "AA should be present in {r}"
-            );
-        }
-        // 72o is trash and must not be in the BB calling range.
-        let oop_combos = RangeParser::parse_many(&oop).unwrap();
-        let has_72o = oop_combos.iter().any(|h| {
-            let (a, b) = (h[0].value, h[1].value);
-            (a == Value::Seven && b == Value::Two) || (a == Value::Two && b == Value::Seven)
-        });
-        assert!(!has_72o, "72o should not be in the BB calling range");
+    fn known_hand_membership_and_weights() {
+        let (oop100, ip100) = srp(100);
+        // 3-bet-mix top: premiums enter the SRP call range at REDUCED weight
+        assert!((w(&oop100, "AhAd") - 0.25).abs() < 1e-6, "AA should call at 0.25");
+        assert!((w(&oop100, "JhJd") - 0.75).abs() < 1e-6, "JJ should call at 0.75");
+        // full-weight core, including the low coverage the audit found missing
+        assert!((w(&oop100, "9h8h") - 1.0).abs() < 1e-6, "98s defends in full");
+        assert!((w(&oop100, "7h6c") - 1.0).abs() < 1e-6, "76o defends in full");
+        // partial-weight margins
+        assert!((w(&oop100, "Ah5c") - 0.75).abs() < 1e-6, "A5o defends at 0.75");
+        assert!((w(&oop100, "6h4c") - 0.5).abs() < 1e-6, "64o defends at 0.5");
+        // trash stays out
+        assert_eq!(w(&oop100, "7h2c"), 0.0, "72o must not defend");
+        // ip range is unchanged and unweighted
+        assert!((w(&ip100, "AhAd") - 1.0).abs() < 1e-6);
+
+        let (oop50, ip50) = srp(50);
+        assert!((w(&oop50, "AhAd") - 0.25).abs() < 1e-6);
+        assert!((w(&oop50, "Th7c") - 0.5).abs() < 1e-6, "T7o defends at 0.5 shallow");
+        assert_eq!(w(&oop50, "7h2c"), 0.0);
+        assert!((w(&ip50, "AhAd") - 1.0).abs() < 1e-6);
     }
 }

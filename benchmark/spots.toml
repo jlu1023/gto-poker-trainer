@@ -34,3 +34,7 @@ stack_depth_bb = 100
 [[spot]]
 board = "Qs8s5h"          # two-tone (spades)
 stack_depth_bb = 50
+
+[[spot]]
+board = "8d6s3c"          # dry rainbow low-mid; de facto gate fixture (trainer CACHED_50,
+stack_depth_bb = 50       # review + viz fixtures) - solved on demand in Phase 3, curated now
