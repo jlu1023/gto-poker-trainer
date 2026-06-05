@@ -41,11 +41,14 @@ STORE = MATRIX_DIR / "history" / "graded.jsonl"
 STORE_BAK = MATRIX_DIR / "history" / "graded.jsonl.gate-bak"
 SERVER_EXE = REPO / "target" / "release" / "gto-server.exe"
 
-# boards guaranteed cached (Phase 1/3/4 solves, srp-v1 keys)
-CACHED_100 = ["Ks7h2c", "9c5d3h", "Jc9h8c"]
-CACHED_50 = ["AcKhQd", "Qs8s5h", "8d6s3c"]
-# never-solved candidates for the pending-solve fixture (distinct from verify_solve's list)
-PENDING_CANDIDATES = ["Th8c4d", "Jd8h5s", "Qc9d4s", "Th7s3h"]
+# board reservations live in verifier_boards.py (partitioned registry, disjointness
+# asserted + consumables/absents swept at setup). The synthetic fixture hands below embed
+# these cached boards; the pending fixture must never be solved by anything.
+import verifier_boards
+
+CACHED_100 = verifier_boards.REVIEW_CACHED_100
+CACHED_50 = verifier_boards.REVIEW_CACHED_50
+PENDING_CANDIDATES = verifier_boards.REVIEW_PENDING
 
 
 def api(path, body=None):
@@ -147,6 +150,7 @@ def build_fixture(pending_board):
 
 def main():
     print("=== Phase 5b Gate Verification ===\n")
+    verifier_boards.prepare(REPO)
     all_pass = True
 
     # ---- 1. builds + units ----

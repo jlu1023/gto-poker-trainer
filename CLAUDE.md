@@ -94,9 +94,13 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   decisions skip with precise reasons; never approximate or action-translate.
 - Gates: `verify_viz.py` (Phase 2), `verify_solve.py` (Phase 3), `verify_trainer.py` (Phase 4),
   `verify_review.py` (Phase 5), all run with the Python 3.12 interpreter that has Playwright
-  (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`). Their fresh-board
-  candidate pools are DISJOINT (each run solves + caches one candidate); extend a pool rather
-  than borrowing another verifier's boards.
+  (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`). Every board a gate
+  reserves lives in `verifier_boards.py` (partitioned registry: expected-cached,
+  solve-consumable, trainer-consumable, absent-required). Each gate asserts the partitions
+  pairwise disjoint at setup and sweeps consumable + absent boards out of the matrix, so
+  fresh-solve pools never drain, absence fixtures self-heal, and the gates pass in any order.
+  Add or move boards in the registry only, never inline in a verifier (hand-curated pools
+  collided three times before the registry).
 
 ## Writing conventions
 - No em dashes in any prose. Use hyphens, colons, or parentheses.

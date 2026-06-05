@@ -41,11 +41,14 @@ EPS_CHIPS = 0.5
 MINOR_CHIPS = 2.0
 FREQ_FLOOR = 0.10
 
-CACHED_50 = "8d6s3c"        # solved in Phase 3
-CACHED_100 = "Ks7h2c"       # solved in Phase 1
-# DISJOINT from verify_solve's and verify_review's candidate pools, so gate runs never
-# consume each other's fresh boards (each run solves + caches one candidate)
-FRESH_CANDIDATES = ["Jh7c2s", "Qd7s2h", "Jc6d2s", "Td7h3c", "Qh6s2d"]
+# board reservations live in verifier_boards.py (partitioned registry, disjointness
+# asserted + consumables/absents swept at setup, so run order never matters)
+import verifier_boards
+
+CACHED_50 = verifier_boards.TRAINER_CACHED_50    # solved in Phase 3, stays cached
+CACHED_100 = verifier_boards.TRAINER_CACHED_100  # solved in Phase 1, stays cached
+FRESH_CANDIDATES = verifier_boards.TRAINER_FRESH
+ABSENT = verifier_boards.TRAINER_ABSENT          # the unsolved-spot 409 fixture
 
 SOLVE_WAIT_MS = 240_000
 
@@ -191,19 +194,23 @@ def step_api_grading():
         ok = False
 
     # error cases
+    absent_cards = [ABSENT[i:i + 2] for i in (0, 2, 4)]
     cases = [
-        ("collision", "/api/setup?depth=50&board=8d6s3c&hand=8d2h", None, 400, "collides"),
-        ("bad depth", "/api/setup?depth=20&board=8d6s3c&hand=AsAc", None, 400, "ranges not available"),
+        ("collision", f"/api/setup?depth=50&board={CACHED_50}&hand={CACHED_50[:2]}2h",
+         None, 400, "collides"),
+        ("bad depth", f"/api/setup?depth=20&board={CACHED_50}&hand=AsAc",
+         None, 400, "ranges not available"),
         ("unsolved spot", "/api/grade",
-         {"board": ["7s", "4h", "2d"], "depth": 50, "hand": "AsAc", "action": "Check"},
+         {"board": absent_cards, "depth": 50, "hand": "AsAc", "action": "Check"},
          409, "not solved"),
         ("out-of-range hand", "/api/grade",
          {"board": cards, "depth": 50, "hand": "7s2d", "action": "Check"},
          400, "not in the BB"),
     ]
-    # make sure the unsolved-spot board really is unsolved
+    # the absent fixture is registry-guarded (no consumable pool may contain it) and the
+    # setup sweep removes any stray solve of it; this assert is defense in depth
     manifest = json.loads((MATRIX_DIR / "manifest.json").read_text())
-    assert "50bb_7s4h2d_flop_srp-v1" not in manifest["spots"], "test board unexpectedly cached"
+    assert f"50bb_{ABSENT}_flop_srp-v1" not in manifest["spots"], "test board unexpectedly cached"
 
     for name, path, body, want_status, want_text in cases:
         status, resp = api(path, body)
@@ -390,7 +397,7 @@ def step_ui():
 
             # ---- client-side collision: no request fired ----
             page.fill("#tBoard", CACHED_50)
-            page.fill("#tHand", "8d2h")
+            page.fill("#tHand", f"{CACHED_50[:2]}2h")
             mark = len([u for u in requests_log if "/api/setup" in u])
             page.click("#tSetup")
             time.sleep(0.4)
@@ -421,6 +428,7 @@ def step_ui():
 
 def main():
     print("=== Phase 4b Gate Verification ===\n")
+    verifier_boards.prepare(REPO)
     results = [("builds + units", step_units())]
 
     SERVER_LOG.parent.mkdir(exist_ok=True)

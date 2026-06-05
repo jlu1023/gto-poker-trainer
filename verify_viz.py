@@ -20,6 +20,8 @@ import time
 import urllib.request
 from pathlib import Path
 
+import verifier_boards
+
 PORT = 5247
 REPO = Path(__file__).parent
 VIZ_DIR = REPO / "viz"
@@ -96,12 +98,19 @@ def step_playwright():
     print("\n=== 3. Playwright rendering checks (cluster-driven, cache hits only) ===")
     from playwright.sync_api import sync_playwright
 
-    # the fixture set: srp-v1 entries of the static export index (the smoke-v0 tree is
-    # unreachable through the cluster and is out of gate scope)
+    # the fixture set: srp-v1 entries of the static export index that the registry reserves
+    # as expected-cached. Non-reserved boards (gate-run state in a future re-export) and the
+    # smoke-v0 tree (unreachable through the cluster) are skipped WITH a note, never silently.
     index = json.loads((DATA_DIR / "index.json").read_text())
-    fixtures = [s for s in index["spots"] if s["key"].endswith("_srp-v1")]
+    reserved = set(verifier_boards.EXPECTED_CACHED)
+    fixtures = [s for s in index["spots"]
+                if s["key"].endswith("_srp-v1") and "".join(s["board"]) in reserved]
+    skipped = [s["key"] for s in index["spots"] if s not in fixtures]
+    if skipped:
+        print(f"  note: {len(skipped)} index entr{'y' if len(skipped) == 1 else 'ies'} outside "
+              f"the registry's expected-cached srp-v1 set, skipped: {', '.join(skipped)}")
     if not fixtures:
-        print("  FAIL  no srp-v1 fixtures in data/index.json")
+        print("  FAIL  no registry-reserved srp-v1 fixtures in data/index.json")
         return False
 
     SERVER_LOG.parent.mkdir(exist_ok=True)
@@ -308,6 +317,7 @@ def step_playwright():
 
 def main():
     print("=== Phase 2b Gate Verification ===\n")
+    verifier_boards.prepare(REPO)
     results = [
         ("cargo check",   step_cargo_check()),
         ("npm build",     step_npm_build()),

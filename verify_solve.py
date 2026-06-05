@@ -34,12 +34,12 @@ MATRIX_DIR = REPO / "matrix"
 SERVER_EXE = REPO / "target" / "release" / "gto-server.exe"
 SERVER_LOG = REPO / "out" / "verify_solve_server.log"
 
-# fresh-solve candidates: canonical order (rank desc), distinct ranks, ace-free so the AA
-# reconciliation cell is never board-blocked, low/dry so the solve converges fast
-CANDIDATES = [
-    "8d6s3c", "9s6h3d", "8h5c2s", "9d7s4c", "8c6d2h",
-    "9h5s3c", "7d5h2c", "9c7h3s", "8s4d2c", "7s4h2d",
-]
+# board reservations live in verifier_boards.py (partitioned registry, disjointness
+# asserted + consumables swept at setup); candidates are ace-free low/dry boards so the
+# AA reconciliation cell is never board-blocked and the solve converges fast
+import verifier_boards
+
+CANDIDATES = verifier_boards.SOLVE_CANDIDATES
 
 SOLVE_WAIT_MS = 240_000  # generous; server-side timeout is 300 s
 
@@ -269,7 +269,11 @@ def step_e2e(fresh_board):
             submit_flop(page, fresh_board)
             status, label, detail, progress = wait_terminal(page, 15_000)
             dt = time.time() - t0
-            if status == "cached" and progress == 0 and dt < 3.0:
+            # no-re-solve is guarded by progress==0 here plus the server-log single-solve
+            # check in 3f; the wall-clock bound only separates a cache load (~2-3s) from a
+            # real solve (20s+). 3.0s flaked at 3.13s on a loaded machine with the cache
+            # hit confirmed, so the bound carries margin now.
+            if status == "cached" and progress == 0 and dt < 10.0:
                 print(f"  PASS  served from cache in {dt:.2f}s with 0 progress events")
             else:
                 print(f"  FAIL  expected instant cache hit; state={status} progress={progress} dt={dt:.2f}s")
@@ -279,9 +283,10 @@ def step_e2e(fresh_board):
                 ok = False
 
             # ---- 3d. Phase 1 prebuilt board cache-hits (key interop) ----
-            print("  -- cache interop: Phase 1 batch board AcKhQd --")
+            interop = verifier_boards.SOLVE_CACHE_INTEROP
+            print(f"  -- cache interop: Phase 1 batch board {interop} --")
             t0 = time.time()
-            submit_flop(page, "AcKhQd")
+            submit_flop(page, interop)
             status, label, detail, progress = wait_terminal(page, 15_000)
             dt = time.time() - t0
             if status == "cached" and progress == 0:
@@ -390,9 +395,10 @@ def step_api_validation():
 
 def main():
     print("=== Phase 3b Gate Verification ===\n")
+    verifier_boards.prepare(REPO)
     fresh = pick_fresh_board()
     if fresh is None:
-        print("FAIL  no un-cached candidate board left; extend CANDIDATES")
+        print("FAIL  no un-cached candidate board left after the sweep (should be impossible)")
         sys.exit(1)
     print(f"fresh-solve candidate: {fresh}\n")
 
