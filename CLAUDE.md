@@ -95,7 +95,15 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   `DEPTHS_BY_POT`, `spot_key(depth, board, variant, pot)`).
 - Viz export (Phase 2, from repo root): `cargo run --release -p gto-store --example export_viz`
   writes `viz/public/data/*.json`; then `npm run dev` (or `build`) inside `viz/`.
-- Solve server (Phase 3+4, from repo root): `cargo run --release -p gto-server`
+- Desktop app (the primary way to RUN the lab): `desktop\src-tauri\target\release\gto-lab-desktop.exe`
+  One window, opens maximised, with `gto-server` spawned as a managed sidecar (lifecycle =
+  app lifecycle: reuse-if-healthy on 7474, fail-loudly on a squatted port or a missing
+  matrix at the resolved root - GTO_LAB_ROOT env else the baked default - and the server
+  dies with the app). Build: `cargo build --release` in `desktop/src-tauri` (the crate is
+  workspace-EXCLUDED). AFTER ANY gto-server REBUILD re-run `desktop/provision-sidecar.ps1`
+  or the app runs the STALE binary (the gates test target/release, the app runs the
+  provisioned copy; verify_desktop pre-flight also catches the drift). AGPL note: D53.
+- Solve server (dev path, from repo root): `cargo run --release -p gto-server`
   Listens on `127.0.0.1:7474` (pots with authored inputs: srp/3bp at 50+100bb, 4bp at 100bb;
   trees from `phase1.toml` via `tree_for`). Endpoints: `/api/health`, `/api/solve` (SSE;
   depth + pot_type in the body, both defaulted for back-compat), `/api/setup` (trainer
@@ -114,7 +122,9 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   4bp (100bb) check-to flop decisions (seat-checked raise sequences, per-depth size bands);
   out-of-envelope decisions skip with precise reasons; never approximate or action-translate.
 - Gates: `verify_viz.py` (Phase 2), `verify_solve.py` (Phase 3), `verify_trainer.py` (Phase 4),
-  `verify_review.py` (Phase 5), all run with the Python 3.12 interpreter that has Playwright
+  `verify_review.py` (Phase 5), `verify_desktop.py` (packaging: sidecar lifecycle,
+  matrix resolution, maximised window, no-survivor teardown), all run with the Python 3.12
+  interpreter that has Playwright
   (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`). Every board a gate
   reserves lives in `verifier_boards.py` (partitioned registry: expected-cached,
   solve-consumable, trainer-consumable, absent-required). Each gate asserts the partitions

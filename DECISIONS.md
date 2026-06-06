@@ -377,6 +377,31 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   exactly one flag across all 21 spots - the known srp AcKhQd +20.1 borderline, unchanged
   from cbf0d43.
 
+## Desktop packaging decisions (2026-06-06)
+
+- **D53. GTO Lab packaged as a Tauri v2 desktop app; the AGPL personal-use assumption is
+  now load-bearing and recorded.** The existing viz (untouched) runs in the webview;
+  `gto-server` ships as a provisioned binary beside the app exe with its lifecycle fully
+  app-owned (reuse-if-healthy on 7474 / fail-loudly on a squatted port / matrix guard
+  naming the resolved root - never a silent empty-cache cold start / spawn with
+  current_dir = repo root so ONE matrix serves app, gates, and batch tools / killed on
+  exit; gto-server is a single process, so the direct kill is the tree-kill, and
+  verify_desktop PROVES no survivor listener remains rather than assuming it). Window
+  opens MAXIMISED (config + setup maximize() against tauri#11554; the gate asserts
+  GetWindowPlacement == SW_SHOWMAXIMIZED). The desktop crate is workspace-EXCLUDED so the
+  pinned-solver engine workspace stays byte-identical. Spawn mechanism deviation stated:
+  std::process::Command on the provisioned binary instead of the plugin-shell sidecar
+  API - same substance (bundled binary, app-owned lifecycle, no PATH dependence),
+  deterministic under bundle.active=false. New foot-gun documented (operator amendment):
+  after any gto-server rebuild, re-run desktop/provision-sidecar.ps1 or the app runs the
+  STALE binary while the gates pass against the fresh one; verify_desktop's pre-flight
+  also fails on provision drift. AGPL: postflop-solver is AGPL-3.0 (pinned 9d1509f).
+  THIS BINARY IS FOR PERSONAL, LOCAL, UNDISTRIBUTED USE on the operator's machine - the
+  packaging step is where that assumption becomes load-bearing. If the artefact were
+  ever distributed, the AGPL obligations (source availability, including the network-use
+  clause) attach; code-signing / installers / distribution / auto-update are explicitly
+  deferred and would re-open this boundary.
+
 ## Phase 4 findings
 
 - **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,
