@@ -5,16 +5,15 @@
 //! `solve_spot_streaming` on a blocking thread, gate on invariants, `store_solution`, return.
 //! Everything streams back over one SSE response: `progress` / `complete` / `error` events.
 //!
-//! Phase 3 scope: 50bb single-raised pots only. The SRP geometry matches `build_matrix`
-//! (BTN raises 2.5bb, BB calls: pot 5bb, effective stack = depth - 2.5) so on-demand keys are
-//! interchangeable with the Phase 1 benchmark entries.
+//! Scope: pots with authored inputs (srp / 3bp at 50+100bb, 4bp at 100bb). Geometry + ranges
+//! come from `gto_preflop::spot_inputs` and the bet tree from `tree_for`, exactly as in
+//! `build_matrix`, so on-demand keys are interchangeable with the benchmark entries.
 
 use axum::extract::{Json, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use futures::Stream;
-use gto_config::Config;
+use gto_config::{Config, PotType};
 use gto_engine::{solve_spot_streaming, Board, RakeSpec, SolveProgress, Spot, Street};
-use gto_preflop::{PreflopContext, PreflopNode};
 use gto_store::viz::{build_contract, SpotContract};
 use gto_store::{load_manifest, load_solution, spot_key, store_solution};
 use gto_validate::check_invariants;
@@ -26,54 +25,65 @@ use tokio::sync::mpsc;
 
 use crate::state::AppState;
 
-/// SRP geometry (matches build_matrix): BTN raises 2.5bb, BB calls.
-pub(crate) const SRP_POT_BB: f64 = 5.0;
-pub(crate) const SRP_RAISE_BB: f64 = 2.5;
-/// Phase 3 default; Phase 4 makes depth selectable (any depth with authored SRP ranges).
+/// Phase 3 default; Phase 4 makes depth selectable (any depth with authored ranges).
 pub(crate) const DEFAULT_DEPTH_BB: u32 = 50;
 
 pub(crate) fn default_depth() -> u32 {
     DEFAULT_DEPTH_BB
 }
 
+pub(crate) fn default_pot_type() -> PotType {
+    PotType::Srp
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SolveRequest {
     /// Three card strings, any order/case, e.g. ["Ks","7h","2c"].
     pub board: Vec<String>,
-    /// Stack depth in bb. Supported depths = the authored SRP ranges (50, 100); anything else
-    /// returns the ranges error. Defaults to 50 (Phase 3 back-compat).
+    /// Stack depth in bb. Supported depths = the authored ranges for the pot type; anything
+    /// else returns the inputs error. Defaults to 50 (Phase 3 back-compat).
     #[serde(default = "default_depth")]
     pub depth: u32,
+    /// Preflop pot family ("srp" / "3bp" / "4bp"). Defaults to srp (back-compat).
+    #[serde(default = "default_pot_type")]
+    pub pot_type: PotType,
 }
 
-/// Canonicalize + validate a board, fetch the authored SRP ranges for `depth`, and build the
-/// `Spot` + cache key. Shared by the solve, setup, and grade handlers so every path produces
-/// identical keys and geometry.
-pub(crate) fn build_srp_spot(
+/// Canonicalize + validate a board, fetch the authored inputs for (pot, depth), and build
+/// the `Spot`, cache key, and the EFFECTIVE config (the pot type's bet tree swapped in, so
+/// the engine, the cache key, and the shrink fallback all see one consistent tree). Shared
+/// by the solve, setup, and grade handlers so every path produces identical keys + geometry.
+pub(crate) fn build_spot(
     state: &AppState,
     board: &[String],
     depth: u32,
-) -> Result<(Spot, String), String> {
+    pot: PotType,
+) -> Result<(Spot, String, Config), String> {
     let flop = canonical_board(board)?;
-    let (oop_range, ip_range) = state
+    // deep-clone out of the shared Arc: this request's cfg carries the pot type's tree
+    let mut cfg = (*state.cfg).clone();
+    cfg.solve.bet_tree = state
+        .cfg
+        .solve
+        .tree_for(pot)
+        .map_err(|e| format!("pot type not available: {e}"))?
+        .clone();
+    let inputs = state
         .charts
-        .ranges_for(&PreflopContext {
-            stack_depth_bb: depth,
-            node: PreflopNode::SingleRaisedPot,
-        })
+        .spot_inputs(pot, depth)
         .map_err(|e| format!("ranges not available for this spot: {e}"))?;
     let spot = Spot {
         stack_depth_bb: depth,
         initial_street: Street::Flop,
         board: Board { flop, turn: None, river: None },
-        pot_bb: SRP_POT_BB,
-        effective_stack_bb: depth as f64 - SRP_RAISE_BB,
-        oop_range,
-        ip_range,
+        pot_bb: inputs.pot_bb,
+        effective_stack_bb: inputs.eff_stack_bb,
+        oop_range: inputs.oop_range,
+        ip_range: inputs.ip_range,
         rake: RakeSpec::default(),
     };
-    let key = spot_key(&spot, &state.cfg.solve.bet_tree);
-    Ok((spot, key))
+    let key = spot_key(&spot, &cfg.solve.bet_tree);
+    Ok((spot, key, cfg))
 }
 
 /// Everything that can travel down the SSE stream.
@@ -137,7 +147,7 @@ async fn run(
     tx: &mpsc::Sender<Update>,
 ) -> Result<Update, String> {
     // canonical board + ranges (unsupported pot type / depth -> clear error, never guessed)
-    let (spot, key) = build_srp_spot(state, &req.board, req.depth)?;
+    let (spot, key, effective_cfg) = build_spot(state, &req.board, req.depth, req.pot_type)?;
     // a board that previously hit the RAM ceiling is cached under the shrunk tree id
     let shrunk_key = format!("{key}-shrunk");
 
@@ -152,7 +162,7 @@ async fn run(
         None
     };
     if let Some((hit_key, shrunk)) = hit {
-        let cfg = state.cfg.clone();
+        let cfg = effective_cfg.clone();
         let contract = tokio::task::spawn_blocking(move || {
             let mut solution = load_solution(&hit_key, &cfg)?;
             Ok::<_, anyhow::Error>(build_contract(&hit_key, &mut solution))
@@ -170,7 +180,7 @@ async fn run(
     };
 
     // ---- fresh solve on a blocking thread ----
-    let cfg = state.cfg.clone();
+    let cfg = effective_cfg;
     let progress_tx = tx.clone();
     let board_label = spot.board.flop.concat();
     println!("solving {key} ...");

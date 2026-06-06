@@ -70,6 +70,8 @@ export interface SolveComplete {
 export interface SetupResponse {
   key: string;
   depth: number;
+  /** "srp" / "3bp" / "4bp" (echoed by the server; defaults to srp). */
+  pot_type: string;
   board: string[];
   hand: string;
   hand_in_range: boolean;

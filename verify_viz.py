@@ -73,10 +73,12 @@ def wait_health(timeout_s=30):
     return False
 
 
-def load_fixture(page, board, depth, timeout_ms=15_000):
+def load_fixture(page, board, depth, pot="srp", timeout_ms=15_000):
     """Load a cached spot through the solve cluster (the single spot entry).
     Returns (state, progress_count). The terminal wait also requires the board in the
-    strip label so a stale terminal state from the PREVIOUS spot cannot satisfy it."""
+    strip label so a stale terminal state from the PREVIOUS spot cannot satisfy it.
+    Pot select goes FIRST: switching to 4bp locks depth to 100 client-side."""
+    page.select_option("#tPot", pot)
     page.select_option("#tDepth", str(depth))
     page.fill("#flop", "")
     page.fill("#flop", board)
@@ -98,22 +100,30 @@ def step_playwright():
     print("\n=== 3. Playwright rendering checks (cluster-driven, cache hits only) ===")
     from playwright.sync_api import sync_playwright
 
-    # the fixture set: current-tree entries of the static export index that the registry
-    # reserves as expected-cached. Non-reserved boards (gate-run state in a future re-export)
-    # and other tree ids (e.g. smoke-v0, unreachable through the cluster) are skipped WITH a
-    # note, never silently.
-    tree = verifier_boards.TREE_ID
+    # the fixture set: every configured pot type's tree entries of the static export index
+    # that the registry reserves as expected-cached. Non-reserved boards (gate-run state in
+    # a future re-export) and other tree ids (e.g. smoke-v0, unreachable through the
+    # cluster) are skipped WITH a note, never silently.
+    def pot_of_key(key):
+        for pot, tid in verifier_boards.TREE_IDS.items():
+            if key.endswith(f"_{tid}"):
+                return pot
+        return None
+
     index = json.loads((DATA_DIR / "index.json").read_text())
     reserved = set(verifier_boards.EXPECTED_CACHED)
     fixtures = [s for s in index["spots"]
-                if s["key"].endswith(f"_{tree}") and "".join(s["board"]) in reserved]
+                if pot_of_key(s["key"]) and "".join(s["board"]) in reserved]
     skipped = [s["key"] for s in index["spots"] if s not in fixtures]
     if skipped:
         print(f"  note: {len(skipped)} index entr{'y' if len(skipped) == 1 else 'ies'} outside "
-              f"the registry's expected-cached {tree} set, skipped: {', '.join(skipped)}")
+              f"the registry's expected-cached tree set, skipped: {', '.join(skipped)}")
     if not fixtures:
-        print(f"  FAIL  no registry-reserved {tree} fixtures in data/index.json")
+        print("  FAIL  no registry-reserved fixtures in data/index.json")
         return False
+    by_pot = {}
+    for s in fixtures:
+        by_pot[pot_of_key(s["key"])] = by_pot.get(pot_of_key(s["key"]), 0) + 1
 
     SERVER_LOG.parent.mkdir(exist_ok=True)
     server_log = open(SERVER_LOG, "w", encoding="utf-8")
@@ -156,18 +166,20 @@ def step_playwright():
                     time.sleep(0.5)
 
             page.wait_for_selector("#solveBtn", timeout=15000)
-            print(f"  {len(fixtures)} {tree} fixtures from data/index.json")
+            print(f"  {len(fixtures)} fixtures from data/index.json "
+                  f"({', '.join(f'{p}:{n}' for p, n in sorted(by_pot.items()))})")
 
             # ---- per-spot rendering checks ----
             for entry in fixtures:
                 key = entry["key"]
                 board = "".join(entry["board"])
                 depth = entry["stack_depth_bb"]
+                pot = pot_of_key(key)
                 console_errors.clear()
                 page_errors.clear()
 
                 try:
-                    state, progress = load_fixture(page, board, depth)
+                    state, progress = load_fixture(page, board, depth, pot)
                 except Exception:
                     print(f"  FAIL  {key}: no terminal solve state within budget")
                     ok = False
@@ -302,6 +314,60 @@ def step_playwright():
                     else:
                         print(f"  FAIL  no bar element for action {act} (index {i})")
                         ok = False
+
+            # ---- 3bp weight-correctness reconciliation (operator acceptance item):
+            # fractional 3-bet weights must survive export (HandEntry.weight = authored
+            # mass) and the grid must aggregate by MASS (detail pane shows it when it
+            # differs from the combo count). A failure here is a STOP + attribution,
+            # never a silent re-fix (the 1e805da grid machinery is the thing under test).
+            tbp_key = verifier_boards.spot_key(100, "9c5d3h", pot="3bp")
+            print(f"\n  -- 3bp fractional-weight spot-check: {tbp_key} --")
+            with open(DATA_DIR / f"{tbp_key}.json") as f:
+                raw3 = json.load(f)
+            w_by_hand = {h["hand"]: h.get("weight", 1.0) for h in raw3["hands"]}
+            aa = [w for h, w in w_by_hand.items() if h[0] == "A" and h[2] == "A"]
+            checks = [
+                ("AA combos export weight 0.75",
+                 len(aa) == 6 and all(abs(w - 0.75) < 1e-6 for w in aa)),
+                ("an A5o combo exports weight 0.25",
+                 abs(w_by_hand.get("Ah5c", 0.0) - 0.25) < 1e-6),
+                ("TT absent (zero 3-bet capacity: SRP calls at 1.0)",
+                 not any(h[0] == "T" and h[2] == "T" for h in w_by_hand)),
+            ]
+            for label_txt, passed in checks:
+                print(f"  {'PASS' if passed else 'FAIL'}  {label_txt}")
+                if not passed:
+                    ok = False
+
+            state, _ = load_fixture(page, "9c5d3h", 100, "3bp")
+            if state != "cached":
+                print(f"  FAIL  3bp reconciliation load not cached (state={state})")
+                ok = False
+            page.wait_for_function(
+                "() => document.querySelectorAll('.cell').length === 169", timeout=10000)
+            clicked = page.evaluate("""
+                () => {
+                    const lbl = [...document.querySelectorAll('.cell-label')]
+                                 .find(el => el.textContent.trim() === 'AA');
+                    if (!lbl) return false;
+                    lbl.closest('.cell').click();
+                    return true;
+                }
+            """)
+            if not clicked:
+                print("  FAIL  AA cell not found in the 3bp grid")
+                ok = False
+            else:
+                time.sleep(0.25)
+                detail_txt = (page.text_content("#detail") or "").strip()
+                # 6 AA combos at authored mass 0.75 = 4.50; the detail pane only prints
+                # mass when it differs from the combo count, so its presence IS the
+                # weight-aware aggregation working end to end
+                if "mass 4.50" in detail_txt:
+                    print("  PASS  AA detail shows mass 4.50 (6 combos x 0.75 authored)")
+                else:
+                    print(f"  FAIL  AA detail lacks 'mass 4.50': '{detail_txt[:120]}'")
+                    ok = False
 
             browser.close()
 

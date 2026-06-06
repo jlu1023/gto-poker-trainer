@@ -27,7 +27,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::solve::{SRP_POT_BB, SRP_RAISE_BB};
+use gto_config::PotType;
 use crate::state::AppState;
 
 fn bad_request(message: String) -> Response {
@@ -185,7 +185,6 @@ fn grade_batch(
 ) -> anyhow::Result<serde_json::Value> {
     let manifest = load_manifest(Path::new(&cfg.io.matrix_dir))?;
     let tree_id = &cfg.solve.bet_tree.bet_tree_id;
-    let pot_chips = (SRP_POT_BB * cfg.solve.chip_per_bb as f64) as f32;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
@@ -208,6 +207,9 @@ fn grade_batch(
             continue;
         }
         let mut solution = load_solution(&key, cfg)?;
+        // D45 scales by the solved spot's OWN pot (the single source carried by the spot),
+        // so per-key pots are already correct when multi-pot decisions arrive in Phase C
+        let pot_chips = (solution.spot.pot_bb * cfg.solve.chip_per_bb as f64) as f32;
 
         // node reads per shape present in this spot's batch (root is already recomputed by
         // load_solution; the [Check] node goes through the same read_node primitive)
@@ -319,8 +321,13 @@ pub async fn report_handler(State(state): State<AppState>) -> Response {
         }))
         .into_response();
     }
-    let pot_chips = (SRP_POT_BB * state.cfg.solve.chip_per_bb as f64) as f32;
-    let _ = SRP_RAISE_BB; // geometry constant shared with solve; pot is what matters here
+    // SRP pot from the single source (depth-independent for srp: pot = 2 * 2.5bb). The
+    // graded store is SRP-only until the Phase C envelope extension, which threads
+    // per-record pots through aggregate instead of one report-wide value.
+    let pot_chips = match state.charts.spot_inputs(PotType::Srp, 50) {
+        Ok(i) => (i.pot_bb * state.cfg.solve.chip_per_bb as f64) as f32,
+        Err(e) => return bad_request(format!("srp inputs unavailable: {e}")),
+    };
     match aggregate(&records, pot_chips, state.cfg.solve.chip_per_bb as f64, &state.cfg.review) {
         Ok(report) => axum::Json(json!({
             "report": report,

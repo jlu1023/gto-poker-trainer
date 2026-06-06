@@ -240,6 +240,9 @@ def step_ui():
 
     contract_50 = json.loads((DATA_DIR / f"{verifier_boards.spot_key(50, CACHED_50)}.json").read_text())
     contract_100 = json.loads((DATA_DIR / f"{verifier_boards.spot_key(100, CACHED_100)}.json").read_text())
+    cached_3bp = verifier_boards.TRAINER_CACHED_3BP
+    contract_3bp = json.loads(
+        (DATA_DIR / f"{verifier_boards.spot_key(100, cached_3bp, pot='3bp')}.json").read_text())
 
     # pick a guaranteed-present hand on the 100bb board (mid-range row from the real data)
     hand_100 = contract_100["hands"][len(contract_100["hands"]) // 2]["hand"]
@@ -284,11 +287,12 @@ def step_ui():
                 return sum(1 for u in requests_log
                            if "/api/solve" in u or "/api/grade" in u or "/data/" in u and u.endswith(".json"))
 
-            def run_round(depth, board, hand, action_label, expect_cached):
+            def run_round(depth, board, hand, action_label, expect_cached, pot="srp"):
                 """One full trainer round; returns the displayed verdict."""
                 page.click("#modeTrain")
                 page.wait_for_function(
                     "() => document.querySelectorAll('.cell').length === 0", timeout=5000)
+                page.select_option("#tPot", pot)
                 page.select_option("#tDepth", str(depth))
                 page.fill("#tBoard", board)
                 page.fill("#tHand", hand)
@@ -378,6 +382,27 @@ def step_ui():
                 print(f"  FAIL  depth missing: history rows {th_spots}, meta '{meta_text.strip()}'")
                 ok = False
 
+            # ---- round 2b: cached 3-BET pot through the commit gate (pot select drives
+            # the key, the geometry, and the action set: the buttons must be the 3bp
+            # tree's root actions, not srp's) ----
+            best_3bp = expected_grade(contract_3bp, "AhAd", contract_3bp["actions"][0])["best"]
+            exp3bp = expected_grade(contract_3bp, "AhAd", best_3bp)
+            r2b = run_round(100, cached_3bp, "ahad", best_3bp, expect_cached=True, pot="3bp")
+            if r2b["buttons"] == contract_3bp["actions"]:
+                print(f"  PASS  3bp commit buttons == 3bp action set {r2b['buttons']}")
+            else:
+                print(f"  FAIL  3bp buttons {r2b['buttons']} != {contract_3bp['actions']}")
+                ok = False
+            if r2b["gate_ok"] and r2b["verdict"] == exp3bp["verdict"] \
+                    and r2b["grid_cells"] == 169 and r2b["progress"] == 0:
+                print(f"  PASS  3bp {cached_3bp} AhAd {best_3bp}: verdict '{r2b['verdict']}', "
+                      f"cached reveal {r2b['dt']:.1f}s")
+            else:
+                print(f"  FAIL  3bp round: gate={r2b['gate_ok']} verdict={r2b['verdict']} "
+                      f"(want {exp3bp['verdict']}) cells={r2b['grid_cells']} "
+                      f"progress={r2b['progress']}")
+                ok = False
+
             # ---- round 3: FRESH board, commit before any solve exists anywhere ----
             r3 = run_round(50, fresh, "acas", "Check", expect_cached=False)
             if r3["gate_ok"] and r3["progress"] >= 1 and r3["grid_cells"] == 169 and r3["verdict"]:
@@ -391,8 +416,8 @@ def step_ui():
             # ---- session history ----
             rows = page.eval_on_selector_all(".th-row", "rs => rs.length")
             head = page.eval_on_selector(".th-head", "el => el.textContent") or ""
-            if rows == 3 and "3 spots" in head and "total EV loss" in head:
-                print(f"  PASS  session history: 3 rows, running total shown")
+            if rows == 4 and "4 spots" in head and "total EV loss" in head:
+                print(f"  PASS  session history: 4 rows, running total shown")
             else:
                 print(f"  FAIL  history rows={rows} head='{head.strip()}'")
                 ok = False

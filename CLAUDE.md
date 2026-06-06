@@ -87,14 +87,16 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   equity cross-check once per pot type (villain-weight-correct since D49). The optional filter
   substring selects spots (pre-flights, single-pot rebuilds) without re-solving the rest. Preflop
   ranges + geometry are authored in-repo (`crates/preflop/data/hu_ranges.toml`, fractional
-  weights); the curated stored set IS the validation benchmark. The gate-side tree id / spot-key
-  format is single-sourced in `verifier_boards.py` (`TREE_ID`, `spot_key()`).
+  weights); the curated stored set IS the validation benchmark. The gate-side tree ids /
+  spot-key format are single-sourced in `verifier_boards.py` (`TREE_IDS` per pot type,
+  `DEPTHS_BY_POT`, `spot_key(depth, board, variant, pot)`).
 - Viz export (Phase 2, from repo root): `cargo run --release -p gto-store --example export_viz`
   writes `viz/public/data/*.json`; then `npm run dev` (or `build`) inside `viz/`.
 - Solve server (Phase 3+4, from repo root): `cargo run --release -p gto-server`
-  Listens on `127.0.0.1:7474` (SRP, depths with authored ranges: 50/100bb; tree `srp-v2`; loads
-  `phase1.toml`). Endpoints: `/api/health`, `/api/solve` (SSE; depth in the body), `/api/setup`
-  (trainer pre-commit: legal actions + hand-in-range, no strategy data), `/api/grade` (verdict
+  Listens on `127.0.0.1:7474` (pots with authored inputs: srp/3bp at 50+100bb, 4bp at 100bb;
+  trees from `phase1.toml` via `tree_for`). Endpoints: `/api/health`, `/api/solve` (SSE;
+  depth + pot_type in the body, both defaulted for back-compat), `/api/setup` (trainer
+  pre-commit: legal actions + hand-in-range, no strategy data), `/api/grade` (verdict
   for a committed action; bands from `[trainer]` config).
 - Trainer (Phase 4): the viz "train" mode. Commit-then-reveal is enforced by data absence: the
   client fetches nothing solver-derived until the action is committed. Grading is engine-side

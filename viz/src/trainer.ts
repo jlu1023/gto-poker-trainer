@@ -39,6 +39,7 @@ export interface TrainerDeps {
   host: HTMLElement;
   /** The train-mode fields of the unified header solve control (ids pinned by the gate). */
   depthSel: HTMLSelectElement;
+  potSel: HTMLSelectElement;
   boardIn: HTMLInputElement;
   handIn: HTMLInputElement;
   setupBtn: HTMLButtonElement;
@@ -70,7 +71,7 @@ export function parseHand(raw: string): { cards?: [string, string]; error?: stri
 }
 
 export function initTrainer(deps: TrainerDeps) {
-  const { host, depthSel, boardIn, handIn, setupBtn } = deps;
+  const { host, depthSel, potSel, boardIn, handIn, setupBtn } = deps;
 
   host.innerHTML = `
     <div class="t-row" id="tErrRow" hidden><span class="t-err" id="tErr"></span></div>
@@ -176,7 +177,7 @@ export function initTrainer(deps: TrainerDeps) {
     let res: Response;
     try {
       res = await fetch(
-        `${SERVER}/api/setup?depth=${depthSel.value}&board=${flop.cards.join("")}&hand=${hand.cards.join("")}`,
+        `${SERVER}/api/setup?depth=${depthSel.value}&pot_type=${potSel.value}&board=${flop.cards.join("")}&hand=${hand.cards.join("")}`,
       );
     } catch {
       setError("solve server unreachable; start it with: cargo run --release -p gto-server");
@@ -198,7 +199,8 @@ export function initTrainer(deps: TrainerDeps) {
     }
 
     setup = s;
-    questionEl.textContent = `${s.hand} on ${s.board.join(" ")} (${s.depth}bb SRP, BB to act)${s.cached ? " · cached" : ""} - your action?`;
+    const potLabel = (s.pot_type ?? "srp").toUpperCase();
+    questionEl.textContent = `${s.hand} on ${s.board.join(" ")} (${s.depth}bb ${potLabel}, BB to act)${s.cached ? " · cached" : ""} - your action?`;
     actionsEl.innerHTML = "";
     for (const a of s.actions) {
       const btn = document.createElement("button");
@@ -253,6 +255,7 @@ export function initTrainer(deps: TrainerDeps) {
               body: JSON.stringify({
                 board: s.board,
                 depth: s.depth,
+                pot_type: s.pot_type ?? "srp",
                 hand: s.hand,
                 action,
               }),
@@ -296,6 +299,7 @@ export function initTrainer(deps: TrainerDeps) {
         },
       },
       s.depth,
+      s.pot_type ?? "srp",
     );
   };
 

@@ -45,6 +45,7 @@ export async function requestSolve(
   board: string[],
   cb: SolveCallbacks,
   depth = 50,
+  potType = "srp",
 ): Promise<void> {
   let done = false;
   const fail = (message: string) => {
@@ -59,7 +60,7 @@ export async function requestSolve(
     res = await fetch(`${SERVER}/api/solve`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ board, depth }),
+      body: JSON.stringify({ board, depth, pot_type: potType }),
     });
   } catch {
     fail("solve server unreachable; start it with: cargo run --release -p gto-server");
@@ -122,6 +123,7 @@ export interface SolvePanelRefs {
   input: HTMLInputElement;
   button: HTMLButtonElement;
   depth: HTMLSelectElement; // the shared header depth select (50/100bb)
+  pot: HTMLSelectElement; // the shared header pot-type select (srp/3bp/4bp)
   status: HTMLElement; // the strip; carries data-state / data-progress-count for verification
   label: HTMLElement;
   track: HTMLElement;
@@ -131,7 +133,7 @@ export interface SolvePanelRefs {
 
 /** Wire the solve panel. `onSolved` receives every successful completion (fresh or cached). */
 export function initSolvePanel(refs: SolvePanelRefs, onSolved: (payload: SolveComplete) => void) {
-  const { input, button, depth: depthSel, status, label, fill, value } = refs;
+  const { input, button, depth: depthSel, pot: potSel, status, label, fill, value } = refs;
   let solving = false;
 
   const setState = (state: string) => {
@@ -160,13 +162,14 @@ export function initSolvePanel(refs: SolvePanelRefs, onSolved: (payload: SolveCo
     const cards = validate();
     if (!cards || solving) return;
     const depth = Number(depthSel.value) || 50;
+    const potType = potSel.value || "srp";
 
     solving = true;
     input.disabled = true;
     button.disabled = true;
     status.dataset.progressCount = "0";
     setState("solving");
-    label.textContent = `solving ${cards.join("")} · ${depth}bb`;
+    label.textContent = `solving ${cards.join("")} · ${depth}bb · ${potType}`;
     fill.style.width = "0%";
     value.textContent = "waiting for the first convergence sample";
 
@@ -212,7 +215,7 @@ export function initSolvePanel(refs: SolvePanelRefs, onSolved: (payload: SolveCo
         label.textContent = "solve failed";
         value.textContent = message;
       },
-    }, depth);
+    }, depth, potType);
   };
 
   input.addEventListener("input", () => void validate());

@@ -41,7 +41,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let timeout_secs = cfg.io.solve_timeout_secs;
-    let tree_id = cfg.solve.bet_tree.bet_tree_id.clone();
+    // every pot type with a configured tree is served; absent ones error per-request
+    let mut trees = vec![format!("srp={}", cfg.solve.bet_tree.bet_tree_id)];
+    if let Some(t) = &cfg.solve.bet_tree_3bp {
+        trees.push(format!("3bp={}", t.bet_tree_id));
+    }
+    if let Some(t) = &cfg.solve.bet_tree_4bp {
+        trees.push(format!("4bp={}", t.bet_tree_id));
+    }
+    let trees = trees.join(", ");
     let app_state = AppState::new(cfg, charts);
 
     // the Vite dev server is a different origin; localhost-only, no credentials -> permissive CORS
@@ -66,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .with_context(|| format!("binding {addr} (is another gto-server running?)"))?;
     println!(
-        "gto-server on http://{addr}  (SRP solve-on-demand, tree {tree_id}, \
+        "gto-server on http://{addr}  (solve-on-demand, trees [{trees}], \
          solve timeout {timeout_secs}s)"
     );
     axum::serve(listener, app).await?;

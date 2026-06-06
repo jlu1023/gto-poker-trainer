@@ -19,8 +19,9 @@ use serde::Deserialize;
 use serde_json::json;
 use std::path::Path;
 
-use crate::solve::{build_srp_spot, default_depth};
+use crate::solve::{build_spot, default_depth, default_pot_type};
 use crate::state::AppState;
+use gto_config::PotType;
 
 #[derive(Debug, Deserialize)]
 pub struct SetupQuery {
@@ -30,6 +31,9 @@ pub struct SetupQuery {
     pub hand: String,
     #[serde(default = "default_depth")]
     pub depth: u32,
+    /// Preflop pot family ("srp" / "3bp" / "4bp"). Defaults to srp (back-compat).
+    #[serde(default = "default_pot_type")]
+    pub pot_type: PotType,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +44,8 @@ pub struct GradeRequest {
     pub action: String,
     #[serde(default = "default_depth")]
     pub depth: u32,
+    #[serde(default = "default_pot_type")]
+    pub pot_type: PotType,
 }
 
 fn bad_request(message: String) -> Response {
@@ -67,7 +73,7 @@ pub async fn setup_handler(
         Ok(b) => b,
         Err(e) => return bad_request(e),
     };
-    let (spot, key) = match build_srp_spot(&state, &board, q.depth) {
+    let (spot, key, effective_cfg) = match build_spot(&state, &board, q.depth, q.pot_type) {
         Ok(v) => v,
         Err(e) => return bad_request(e),
     };
@@ -88,8 +94,8 @@ pub async fn setup_handler(
         Err(e) => return bad_request(format!("hand check failed: {e}")),
     };
 
-    // legal root actions from the bet-tree config alone: no game build, no solve
-    let actions = match root_actions(&spot, &state.cfg.solve) {
+    // legal root actions from the pot type's bet-tree config alone: no game build, no solve
+    let actions = match root_actions(&spot, &effective_cfg.solve) {
         Ok(a) => a,
         Err(e) => return bad_request(format!("deriving root actions: {e}")),
     };
@@ -106,6 +112,7 @@ pub async fn setup_handler(
     axum::Json(json!({
         "key": key,
         "depth": q.depth,
+        "pot_type": q.pot_type,
         "board": spot.board.flop,
         "hand": hand,
         "hand_in_range": weight > 0.0,
@@ -119,7 +126,8 @@ pub async fn grade_handler(
     State(state): State<AppState>,
     Json(req): Json<GradeRequest>,
 ) -> Response {
-    let (spot, key) = match build_srp_spot(&state, &req.board, req.depth) {
+    let (spot, key, _effective_cfg) = match build_spot(&state, &req.board, req.depth, req.pot_type)
+    {
         Ok(v) => v,
         Err(e) => return bad_request(e),
     };

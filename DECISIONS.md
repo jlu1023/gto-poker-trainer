@@ -317,6 +317,22 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   all-weights-1.0 equivalence are unit-tested; the 3bp re-check reconciled EXACTLY
   (0.5478 == 0.5478). This was the audit's range-weight tripwire class surfacing at a new
   code surface, caught by the guard-every-new-surface rule.
+- **D50. Pot types live end to end (Phase B): server build_spot, viz pot selector,
+  curated-only export, registry TREE_IDS.** The server resolves every request through
+  `build_spot(board, depth, pot)` (spot_inputs + the pot's tree in a per-request effective
+  config; SRP literals gone server-side; pot_type serde-defaults to srp for back-compat on
+  all three endpoints). D45 in review grading now scales by the loaded solution's own pot
+  per key. The viz pot selector constrains depth per pot (4bp locks to 100bb). export_viz
+  exports ONLY the curated set (keys derivable from benchmark/spots.toml + smoke) so ad-hoc
+  on-demand solves never leak into committed fixtures. The registry grew TREE_IDS +
+  DEPTHS_BY_POT + a pot-aware spot_key whose default keeps every pre-pot call site
+  byte-identical, and the sweep clears consumable boards across all pot keys. All four
+  gates extended and GATE PASSED: 19 fixtures across 3 pots; the 3bp fractional-weight
+  reconciliation (AA 0.75 / A5o 0.25 / TT absent / grid mass 4.50 - the 1e805da machinery
+  generalized, no STOP); a 3bp fresh on-demand solve (31.4s, stored pot_bb 18.0,
+  OOP-aggressor action set); a cached 3bp trainer round through the commit gate (buttons ==
+  the 3bp tree's actions). One trainer rerun after the known LNK1104 linker race poisoned
+  its test step (engine tests 10/10 standalone).
 
 ## Phase 4 findings
 

@@ -77,14 +77,18 @@ def step_npm_build():
     return True
 
 
-def pick_fresh_board():
+def pick_fresh_board(pot="srp", exclude=()):
+    """First candidate board with no cached solve under `pot`'s 50bb key (the sweep makes
+    this the whole pool; `exclude` keeps the srp and 3bp rounds on distinct boards)."""
     manifest_path = MATRIX_DIR / "manifest.json"
     cached = set()
     if manifest_path.exists():
         cached = set(json.loads(manifest_path.read_text())["spots"].keys())
     for board in CANDIDATES:
-        if verifier_boards.spot_key(50, board) not in cached and \
-           verifier_boards.spot_key(50, board, "-shrunk") not in cached:
+        if board in exclude:
+            continue
+        if verifier_boards.spot_key(50, board, pot=pot) not in cached and \
+           verifier_boards.spot_key(50, board, "-shrunk", pot=pot) not in cached:
             return board
     return None
 
@@ -117,7 +121,8 @@ def expected_class_stats(key, label_ranks=("A", "A")):
             "exploit": summary["exploitability_pct_pot"], "actions": root["actions"]}
 
 
-def submit_flop(page, board):
+def submit_flop(page, board, pot="srp"):
+    page.select_option("#tPot", pot)
     page.fill("#flop", "")
     page.fill("#flop", board)
     page.click("#solveBtn")
@@ -155,7 +160,7 @@ def click_class_cell(page, label):
     """)
 
 
-def step_e2e(fresh_board):
+def step_e2e(fresh_board, fresh_3bp):
     print("\n=== 3. End-to-end solve-on-demand (Playwright) ===")
     from playwright.sync_api import sync_playwright
 
@@ -314,6 +319,42 @@ def step_e2e(fresh_board):
                 print(f"  FAIL  state={state} disabled={disabled} msg='{msg}'")
                 ok = False
 
+            # ---- 3g. 3-bet-pot fresh solve (the pot selector drives tree + geometry) ----
+            key3 = verifier_boards.spot_key(50, fresh_3bp, pot="3bp")
+            print(f"  -- 3bp fresh solve: {fresh_3bp} (key {key3}) --")
+            t0 = time.time()
+            submit_flop(page, fresh_3bp, pot="3bp")
+            status, label, detail, progress = wait_terminal(page, SOLVE_WAIT_MS)
+            dt = time.time() - t0
+            if status != "done":
+                print(f"  FAIL  expected state 'done', got '{status}' ({label}: {detail})")
+                return False
+            if progress < 1:
+                print(f"  FAIL  no progress events streamed (count={progress})")
+                ok = False
+            else:
+                print(f"  PASS  3bp solved in {dt:.1f}s with {progress} streamed samples")
+            # geometry assertion at the data layer: the stored spot carries the 3bp pot
+            # (18bb at 50bb: pot = 2 * the 9bb 3-bet), and the root is the OOP aggressor
+            # with the 3bp tree's action set (Check + two bets)
+            summary3 = json.loads((MATRIX_DIR / f"{key3}.summary.json").read_text())
+            pot_bb = summary3["spot"]["pot_bb"]
+            acts3 = summary3["root"]["actions"]
+            if abs(pot_bb - 18.0) < 1e-9:
+                print(f"  PASS  stored 3bp geometry: pot_bb = {pot_bb} (2 x 9bb 3-bet)")
+            else:
+                print(f"  FAIL  stored 3bp pot_bb = {pot_bb}, expected 18.0")
+                ok = False
+            if acts3[0] == "Check" and len(acts3) == 3 and \
+                    all(a.startswith("Bet(") for a in acts3[1:]):
+                print(f"  PASS  3bp root action set {acts3} (OOP aggressor, two c-bet sizes)")
+            else:
+                print(f"  FAIL  unexpected 3bp root action set {acts3}")
+                ok = False
+            if not assert_grid(page):
+                print("  FAIL  grid did not render for the 3bp solve")
+                ok = False
+
             # ---- console hygiene ----
             errs = console_errors + page_errors
             if errs:
@@ -324,7 +365,7 @@ def step_e2e(fresh_board):
 
             browser.close()
 
-        # ---- 3f. server log: the fresh board was solved exactly once ----
+        # ---- 3f. server log: each fresh board was solved exactly once ----
         server_log.flush()
         log_text = SERVER_LOG.read_text(encoding="utf-8")
         n_solves = log_text.count(f"solving {verifier_boards.spot_key(50, fresh_board)}")
@@ -332,6 +373,12 @@ def step_e2e(fresh_board):
             print(f"  PASS  server log shows exactly 1 solve of {fresh_board} across 2 submits")
         else:
             print(f"  FAIL  server log shows {n_solves} solves of {fresh_board} (expected 1)")
+            ok = False
+        n3 = log_text.count(f"solving {verifier_boards.spot_key(50, fresh_3bp, pot='3bp')}")
+        if n3 == 1:
+            print(f"  PASS  server log shows exactly 1 solve of the 3bp key")
+        else:
+            print(f"  FAIL  server log shows {n3} solves of the 3bp key (expected 1)")
             ok = False
 
         return ok
@@ -405,12 +452,16 @@ def main():
     if fresh is None:
         print("FAIL  no un-cached candidate board left after the sweep (should be impossible)")
         sys.exit(1)
-    print(f"fresh-solve candidate: {fresh}\n")
+    fresh_3bp = pick_fresh_board("3bp", exclude=(fresh,))
+    if fresh_3bp is None:
+        print("FAIL  no un-cached 3bp candidate board left after the sweep")
+        sys.exit(1)
+    print(f"fresh-solve candidates: srp {fresh}, 3bp {fresh_3bp}\n")
 
     results = [
         ("cargo check", step_cargo_check()),
         ("npm build", step_npm_build()),
-        ("solve-on-demand E2E", step_e2e(fresh)),
+        ("solve-on-demand E2E", step_e2e(fresh, fresh_3bp)),
         ("server-side validation", step_api_validation()),
     ]
 

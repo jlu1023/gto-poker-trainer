@@ -1,6 +1,16 @@
 {
   "spots": [
     {
+      "key": "100bb_6c5d4h_flop_3bp-v1",
+      "board": [
+        "6c",
+        "5d",
+        "4h"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.004375726
+    },
+    {
       "key": "100bb_6c5d4h_flop_srp-v2",
       "board": [
         "6c",
@@ -9,6 +19,16 @@
       ],
       "stack_depth_bb": 100,
       "exploitability_pct_pot": 0.0044270875
+    },
+    {
+      "key": "100bb_7h7d2c_flop_3bp-v1",
+      "board": [
+        "7h",
+        "7d",
+        "2c"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.0048067737
     },
     {
       "key": "100bb_7h7d2c_flop_srp-v2",
@@ -21,6 +41,26 @@
       "exploitability_pct_pot": 0.004408021
     },
     {
+      "key": "100bb_9c5d3h_flop_3bp-v1",
+      "board": [
+        "9c",
+        "5d",
+        "3h"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.0047212266
+    },
+    {
+      "key": "100bb_9c5d3h_flop_4bp-v1",
+      "board": [
+        "9c",
+        "5d",
+        "3h"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.0034343372
+    },
+    {
       "key": "100bb_9c5d3h_flop_srp-v2",
       "board": [
         "9c",
@@ -29,6 +69,16 @@
       ],
       "stack_depth_bb": 100,
       "exploitability_pct_pot": 0.004580655
+    },
+    {
+      "key": "100bb_Jc9h8c_flop_3bp-v1",
+      "board": [
+        "Jc",
+        "9h",
+        "8c"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.0036329746
     },
     {
       "key": "100bb_Jc9h8c_flop_srp-v2",
@@ -51,6 +101,26 @@
       "exploitability_pct_pot": 0.0040529585
     },
     {
+      "key": "100bb_Ks7h2c_flop_3bp-v1",
+      "board": [
+        "Ks",
+        "7h",
+        "2c"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.0044505596
+    },
+    {
+      "key": "100bb_Ks7h2c_flop_4bp-v1",
+      "board": [
+        "Ks",
+        "7h",
+        "2c"
+      ],
+      "stack_depth_bb": 100,
+      "exploitability_pct_pot": 0.003768765
+    },
+    {
       "key": "100bb_Ks7h2c_flop_srp-v2",
       "board": [
         "Ks",
@@ -71,6 +141,16 @@
       "exploitability_pct_pot": 0.0034758472
     },
     {
+      "key": "50bb_8d6s3c_flop_3bp-v1",
+      "board": [
+        "8d",
+        "6s",
+        "3c"
+      ],
+      "stack_depth_bb": 50,
+      "exploitability_pct_pot": 0.004728993
+    },
+    {
       "key": "50bb_8d6s3c_flop_srp-v2",
       "board": [
         "8d",
@@ -81,6 +161,16 @@
       "exploitability_pct_pot": 0.0047102235
     },
     {
+      "key": "50bb_AcKhQd_flop_3bp-v1",
+      "board": [
+        "Ac",
+        "Kh",
+        "Qd"
+      ],
+      "stack_depth_bb": 50,
+      "exploitability_pct_pot": 0.0049507036
+    },
+    {
       "key": "50bb_AcKhQd_flop_srp-v2",
       "board": [
         "Ac",
@@ -89,6 +179,16 @@
       ],
       "stack_depth_bb": 50,
       "exploitability_pct_pot": 0.0044486905
+    },
+    {
+      "key": "50bb_Qs8s5h_flop_3bp-v1",
+      "board": [
+        "Qs",
+        "8s",
+        "5h"
+      ],
+      "stack_depth_bb": 50,
+      "exploitability_pct_pot": 0.0048744977
     },
     {
       "key": "50bb_Qs8s5h_flop_srp-v2",

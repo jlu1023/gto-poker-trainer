@@ -33,7 +33,12 @@ app.innerHTML = `
       <button id="modeReview" class="mode-btn" type="button">review</button>
     </div>
     <div class="solve-wrap">
-      <label for="tDepth"><span class="sw-explore">solve · srp</span><span class="sw-train">train · srp</span></label>
+      <label for="tDepth"><span class="sw-explore">solve</span><span class="sw-train">train</span></label>
+      <select id="tPot" aria-label="pot type">
+        <option value="srp">srp</option>
+        <option value="3bp">3bp</option>
+        <option value="4bp">4bp</option>
+      </select>
       <select id="tDepth" aria-label="stack depth">
         <option value="50">50bb</option>
         <option value="100">100bb</option>
@@ -75,6 +80,18 @@ app.innerHTML = `
 
 const meta = app.querySelector<HTMLDivElement>("#meta")!;
 const depthSel = app.querySelector<HTMLSelectElement>("#tDepth")!;
+const potSel = app.querySelector<HTMLSelectElement>("#tPot")!;
+
+// 4-bet pots exist at 100bb only (50bb is jam-or-fold, out of scope by decision): the
+// depth options follow the pot type so an unsupported pair cannot be submitted.
+function syncDepthToPot(): void {
+  const opt50 = depthSel.querySelector<HTMLOptionElement>('option[value="50"]')!;
+  const lock100 = potSel.value === "4bp";
+  opt50.disabled = lock100;
+  if (lock100 && depthSel.value === "50") depthSel.value = "100";
+}
+potSel.addEventListener("change", syncDepthToPot);
+syncDepthToPot();
 const flopIn = app.querySelector<HTMLInputElement>("#flop")!;
 const boardIn = app.querySelector<HTMLInputElement>("#tBoard")!;
 const handHl = app.querySelector<HTMLInputElement>("#exploreHand")!;
@@ -287,6 +304,7 @@ function main() {
       input: flopIn,
       button: app!.querySelector<HTMLButtonElement>("#solveBtn")!,
       depth: depthSel,
+      pot: potSel,
       status: document.querySelector<HTMLElement>("#solveStatus")!,
       label: document.querySelector<HTMLElement>("#ssLabel")!,
       track: document.querySelector<HTMLElement>("#ssTrack")!,
@@ -301,6 +319,7 @@ function main() {
   initTrainer({
     host: document.querySelector<HTMLElement>("#trainerHost")!,
     depthSel,
+    potSel,
     boardIn,
     handIn: app!.querySelector<HTMLInputElement>("#tHand")!,
     setupBtn: app!.querySelector<HTMLButtonElement>("#tSetup")!,
