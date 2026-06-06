@@ -14,9 +14,9 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-# sidecar spawn/kill (P2 lifecycle) + readiness checks
-tauri-plugin-shell = "2"
-serde_json = "1"
+# the fail-loudly dialogs (matrix guard, squatted port, sidecar missing/unhealthy) use
+# MessageBoxW directly: works pre-event-loop, no plugin or app handle needed
+windows-sys = { version = "0.60", features = ["Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 strip = true
