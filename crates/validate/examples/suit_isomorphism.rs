@@ -19,9 +19,9 @@
 //! Run from the repo root:  cargo run --release -p gto-validate --example suit_isomorphism
 
 use anyhow::{anyhow, Context, Result};
-use gto_config::Config;
+use gto_config::{Config, PotType};
 use gto_engine::{solve_spot, Board, NodeStrategy, RakeSpec, Spot, Street};
-use gto_preflop::{PreflopCharts, PreflopContext, PreflopNode};
+use gto_preflop::PreflopCharts;
 use std::collections::HashMap;
 
 const DEPTH_BB: u32 = 50; // cheaper tree than 100bb; the invariant is depth-independent
@@ -62,10 +62,8 @@ fn canon_hand(label: &str) -> String {
 }
 
 fn build_spot(charts: &PreflopCharts, flop: [&str; 3]) -> Result<Spot> {
-    let (oop_range, ip_range) = charts.ranges_for(&PreflopContext {
-        stack_depth_bb: DEPTH_BB,
-        node: PreflopNode::SingleRaisedPot,
-    })?;
+    // geometry + ranges from the single source (no pot/stack literals here)
+    let inputs = charts.spot_inputs(PotType::Srp, DEPTH_BB)?;
     Ok(Spot {
         stack_depth_bb: DEPTH_BB,
         initial_street: Street::Flop,
@@ -74,10 +72,10 @@ fn build_spot(charts: &PreflopCharts, flop: [&str; 3]) -> Result<Spot> {
             turn: None,
             river: None,
         },
-        pot_bb: 5.0,
-        effective_stack_bb: DEPTH_BB as f64 - 2.5,
-        oop_range,
-        ip_range,
+        pot_bb: inputs.pot_bb,
+        effective_stack_bb: inputs.eff_stack_bb,
+        oop_range: inputs.oop_range,
+        ip_range: inputs.ip_range,
         rake: RakeSpec::default(),
     })
 }

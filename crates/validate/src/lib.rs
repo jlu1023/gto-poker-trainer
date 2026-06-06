@@ -24,9 +24,11 @@ pub mod advisory;
 
 use anyhow::{anyhow, bail, Result};
 use gto_config::Config;
-use gto_engine::{compute_exploitability, NodeStrategy, PostFlopGame, SolverAction, Spot, SpotSolution};
+use gto_engine::{
+    card_from_str, compute_exploitability, NodeStrategy, PostFlopGame, SolverAction,
+    SolverRange, Spot, SpotSolution,
+};
 use rs_poker::core::{Card, Hand, Rankable, Suit, Value};
-use rs_poker::holdem::RangeParser;
 
 /// Outcome of the internal-invariant checks.
 #[derive(Debug, Clone, Default)]
@@ -514,24 +516,44 @@ pub fn cross_check_equity(solution: &SpotSolution, hero_index: usize) -> Result<
     })
 }
 
-/// Hero equity vs a villain range on a flop, by exhaustive turn+river enumeration with card removal.
-/// Returns (equity in 0..1, number of unblocked villain combos averaged over).
+/// Hero equity vs a villain range on a flop, by exhaustive turn+river enumeration with card
+/// removal. Returns (equity in 0..1, number of unblocked villain combos averaged over).
+///
+/// The villain range is parsed by the AUTHORITATIVE parser (postflop-solver, via the engine
+/// re-export): it is the only parser that knows the weighted ":w" syntax the authored ranges
+/// use, and the solver equity this check reconciles against is villain-reach-WEIGHTED, so the
+/// independent tally must weight identically. The first weighted-villain check (3bp 100bb
+/// 9c5d3h, BTN call-vs-3-bet at fractional weights) measured the unweighted version 1.8 pts
+/// off the solver for exactly this reason. rs_poker remains the independent part: the 7-card
+/// RANKING that produces each combo's equity. Range-string semantics are not independent -
+/// they belong to the system under test.
 fn enumerate_equity(hero: &[Card; 2], board: &[Card], villain_range: &str) -> Result<(f32, usize)> {
-    let villains = RangeParser::parse_many(villain_range)
-        .map_err(|e| anyhow!("parsing villain range '{villain_range}': {e:?}"))?;
+    let range: SolverRange = villain_range
+        .parse()
+        .map_err(|e| anyhow!("parsing villain range '{villain_range}': {e}"))?;
+    let rs_card = psf_to_rs_table()?;
 
     let full_deck = all_cards();
     let mut base_used: Vec<Card> = board.to_vec();
     base_used.extend_from_slice(hero);
 
     let mut sum_equity = 0.0f64;
+    let mut weight_sum = 0.0f64;
     let mut counted = 0usize;
 
-    for fh in &villains {
-        let v0 = fh[0];
-        let v1 = fh[1];
+    let mut pairs: Vec<(Card, Card, f64)> = Vec::new();
+    for id0 in 0..52u8 {
+        for id1 in (id0 + 1)..52u8 {
+            let w = range.get_weight_by_cards(id0, id1) as f64;
+            if w > 0.0 {
+                pairs.push((rs_card[id0 as usize], rs_card[id1 as usize], w));
+            }
+        }
+    }
+
+    for &(v0, v1, w) in &pairs {
         // skip villain combos blocked by the hero's cards or the board
-        if v0 == v1 || base_used.contains(&v0) || base_used.contains(&v1) {
+        if base_used.contains(&v0) || base_used.contains(&v1) {
             continue;
         }
 
@@ -564,7 +586,8 @@ fn enumerate_equity(hero: &[Card; 2], board: &[Card], villain_range: &str) -> Re
             }
         }
         if total > 0 {
-            sum_equity += (win as f64 + 0.5 * tie as f64) / total as f64;
+            sum_equity += w * ((win as f64 + 0.5 * tie as f64) / total as f64);
+            weight_sum += w;
             counted += 1;
         }
     }
@@ -572,7 +595,7 @@ fn enumerate_equity(hero: &[Card; 2], board: &[Card], villain_range: &str) -> Re
     if counted == 0 {
         bail!("no unblocked villain combos for range '{villain_range}'");
     }
-    Ok(((sum_equity / counted as f64) as f32, counted))
+    Ok(((sum_equity / weight_sum) as f32, counted))
 }
 
 fn parse_hole(label: &str) -> Result<[Card; 2]> {
@@ -610,6 +633,28 @@ fn all_cards() -> Vec<Card> {
     cards
 }
 
+/// postflop-solver card id -> rs_poker Card, built by parsing every one of the 52 card
+/// STRINGS through both parsers (no encoding arithmetic is assumed for either crate). The
+/// permutation check makes a parser disagreement loud instead of a silent mis-mapping.
+fn psf_to_rs_table() -> Result<[Card; 52]> {
+    let mut table = [Card::new(Value::Two, Suit::Club); 52];
+    let mut seen = [false; 52];
+    for r in "23456789TJQKA".chars() {
+        for s in "cdhs".chars() {
+            let label = format!("{r}{s}");
+            let id = card_from_str(&label)
+                .map_err(|e| anyhow!("postflop-solver rejects card '{label}': {e}"))?
+                as usize;
+            if id >= 52 || seen[id] {
+                bail!("postflop-solver card ids are not a permutation (card '{label}' -> {id})");
+            }
+            seen[id] = true;
+            table[id] = parse_card(&label)?;
+        }
+    }
+    Ok(table)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -625,6 +670,37 @@ mod tests {
             equity: vec![0.8, 0.7],
             ev_per_action: Vec::new(),
         }
+    }
+
+    /// The weighted-villain law, hand-verified at the data layer: enumerating vs
+    /// "A:wa, B:wb" must equal (wa*eq_vs_A + wb*eq_vs_B) / (wa+wb) composed from the two
+    /// single-villain enumerations, and the all-weights-1.0 case must equal the plain
+    /// average (the degenerate-case proof that the weighting changed nothing for the
+    /// unweighted ranges every prior cross-check ran on).
+    #[test]
+    fn enumerate_equity_weights_the_villain_range() {
+        let hero = parse_hole("KsKh").unwrap();
+        let board = vec![
+            parse_card("9h").unwrap(),
+            parse_card("7d").unwrap(),
+            parse_card("2c").unwrap(),
+        ];
+        let (eq_aa, n_aa) = enumerate_equity(&hero, &board, "AsAd").unwrap();
+        let (eq_qq, n_qq) = enumerate_equity(&hero, &board, "QsQd").unwrap();
+        assert_eq!((n_aa, n_qq), (1, 1));
+        assert!(eq_aa < 0.25 && eq_qq > 0.75, "KK is behind AA ({eq_aa}) and ahead of QQ ({eq_qq})");
+
+        // degenerate case: weights 1.0 == the plain average
+        let (eq_even, n_even) = enumerate_equity(&hero, &board, "AsAd,QsQd").unwrap();
+        assert_eq!(n_even, 2);
+        let plain = (eq_aa + eq_qq) / 2.0;
+        assert!((eq_even - plain).abs() < 1e-4, "unweighted: {eq_even} vs plain {plain}");
+
+        // weighted case: AA at 0.2 must pull the average toward the QQ matchup, exactly
+        let (eq_w, n_w) = enumerate_equity(&hero, &board, "AsAd:0.2,QsQd").unwrap();
+        assert_eq!(n_w, 2);
+        let expect = (0.2 * eq_aa + 1.0 * eq_qq) / 1.2;
+        assert!((eq_w - expect).abs() < 1e-4, "weighted: {eq_w} vs composed {expect}");
     }
 
     #[test]

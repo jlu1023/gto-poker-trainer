@@ -38,7 +38,10 @@ Seven crates under `crates/`:
 - `config`  (`gto-config`)  - single source of truth for every tunable; serde schema + `default.toml`.
 - `engine`  (`gto-engine`)  - `Spot` model, spot-to-solver mapping, `solve_spot` /
   `solve_spot_streaming`, `query_node`.
-- `preflop` (`gto-preflop`) - HU preflop range provider (authored `data/hu_ranges.toml`).
+- `preflop` (`gto-preflop`) - HU preflop range + geometry provider (authored
+  `data/hu_ranges.toml`): `spot_inputs(pot_type, depth)` returns ranges + pot + effective
+  stack per preflop line (srp / 3bp / 4bp; the pot = 2*raise_to law is load-asserted and the
+  authored values test-pinned; per-hand range-consistency laws are unit-tested).
 - `validate`(`gto-validate`)- internal invariants (six-check `check_invariants` gate: exploitability
   target, root + full-tree strategy normalization, per-action EV consistency, root zero-sum,
   best-response recheck) + `rs_poker` equity cross-check; example `suit_isomorphism` (on-demand,
@@ -60,7 +63,8 @@ depends on all six.
 ## Spot model (the highest-risk piece)
 postflop-solver solves a subgame from a chosen street. Preflop / earlier-street history is NOT passed
 to the solver; it is encoded in three inputs: the two ranges, the starting pot, and the effective
-stack. Money is carried in big blinds and converted to integer chips via `chip_per_bb`. Node reads
+stack - all sourced per pot type from `gto_preflop::spot_inputs` (never hardcoded at call sites).
+Money is carried in big blinds and converted to integer chips via `chip_per_bb`. Node reads
 use semantic `Step`s (Action / Chance) resolved to action indices at query time, so queries survive
 action-tree edits.
 
@@ -75,13 +79,16 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
 - `cargo check --workspace --all-targets`
 - Smoke (from repo root): `cargo run --release -p gto-store --example smoke`
   Converges below target, proves the store round-trip, writes `out/smoke.json` and a `matrix/` entry.
-- Curated matrix (Phase 1, from repo root): `cargo run --release -p gto-store --example build_matrix`
-  Solves the curated benchmark (`benchmark/spots.toml`) with the `srp-v2` tree (`phase1.toml`: flop
-  33%/75% bets + one "3x" check-raise size both players, single turn/river size, no turn/river
-  raises), asserts invariants, stores each spot, and runs the rs_poker equity cross-check. Preflop
-  ranges are authored in-repo (`crates/preflop/data/hu_ranges.toml`, fractional weights since the
-  2026-06-05 re-authoring); the curated stored set IS the validation benchmark. The gate-side tree
-  id / spot-key format is single-sourced in `verifier_boards.py` (`TREE_ID`, `spot_key()`).
+- Curated matrix (from repo root): `cargo run --release -p gto-store --example build_matrix [filter]`
+  Solves the curated benchmark (`benchmark/spots.toml`; rows carry `pot_type` srp/3bp/4bp) with
+  each pot type's tree from `phase1.toml` via `tree_for` (srp-v2: flop 33%/75% + one "3x"
+  check-raise both players; 3bp-v1 extends it; 4bp-v1 single 33% + "3x"; single turn/river size,
+  no turn/river raises anywhere), asserts invariants, stores each spot, and runs the rs_poker
+  equity cross-check once per pot type (villain-weight-correct since D49). The optional filter
+  substring selects spots (pre-flights, single-pot rebuilds) without re-solving the rest. Preflop
+  ranges + geometry are authored in-repo (`crates/preflop/data/hu_ranges.toml`, fractional
+  weights); the curated stored set IS the validation benchmark. The gate-side tree id / spot-key
+  format is single-sourced in `verifier_boards.py` (`TREE_ID`, `spot_key()`).
 - Viz export (Phase 2, from repo root): `cargo run --release -p gto-store --example export_viz`
   writes `viz/public/data/*.json`; then `npm run dev` (or `build`) inside `viz/`.
 - Solve server (Phase 3+4, from repo root): `cargo run --release -p gto-server`

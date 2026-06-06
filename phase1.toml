@@ -21,6 +21,31 @@ flop_raise_sizes = ["3x", "3x"]
 turn_raise_sizes = ["", ""]
 river_raise_sizes = ["", ""]
 
+# 3-bet-pot tree: EXTENDS srp-v2's geometry unchanged (the deliberate baseline; SPR 4.5
+# still supports two sizes + the raise, and the all-in thresholds prune harder as SPR
+# falls). Cost is MEASURED on one spot before the benchmark builds on it (STOP A1) - the
+# srp-v2 2.4x-vs-estimated-+5-8% lesson.
+[solve.bet_tree_3bp]
+bet_tree_id = "3bp-v1"
+flop_bet_sizes = ["33%, 75%", "33%, 75%"]
+turn_bet_sizes = ["75%", "75%"]
+river_bet_sizes = ["75%", "75%"]
+flop_raise_sizes = ["3x", "3x"]
+turn_raise_sizes = ["", ""]
+river_raise_sizes = ["", ""]
+
+# 4-bet-pot tree: DIFFERS from srp-v2 deliberately - at SPR ~1.77 a 75% bet plus a raise
+# chain is all-in anyway, so one flop size + the raise keeps the tree honest while the
+# 1.5/0.15 thresholds inject the jams. 100bb only (no [3bp/4bp].50 geometry exists for it).
+[solve.bet_tree_4bp]
+bet_tree_id = "4bp-v1"
+flop_bet_sizes = ["33%", "33%"]
+turn_bet_sizes = ["75%", "75%"]
+river_bet_sizes = ["75%", "75%"]
+flop_raise_sizes = ["3x", "3x"]
+turn_raise_sizes = ["", ""]
+river_raise_sizes = ["", ""]
+
 [solve.abstraction]
 # Compression on for the batch so a 100bb flop with two flop sizes stays under the RAM ceiling.
 use_compression = true

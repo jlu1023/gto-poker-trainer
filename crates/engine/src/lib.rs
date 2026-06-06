@@ -18,14 +18,19 @@ pub mod grade;
 use anyhow::{anyhow, bail, Result};
 use gto_config::SolveConfig;
 use postflop_solver::{
-    card_from_str, finalize, flop_from_str, holes_to_strings, solve_step, Action, ActionTree,
-    BetSizeOptions, BoardState, CardConfig, DonkSizeOptions, Range, TreeConfig, NOT_DEALT,
+    finalize, flop_from_str, holes_to_strings, solve_step, Action, ActionTree, BetSizeOptions,
+    BoardState, CardConfig, DonkSizeOptions, Range, TreeConfig, NOT_DEALT,
 };
 use serde::{Deserialize, Serialize};
 
 // re-exported so callers can build `Step`s and inspect cards without depending on the solver
-// crate; validate also reaches the game type and the best-response primitive through here
-pub use postflop_solver::{compute_exploitability, Action as SolverAction, Card, PostFlopGame};
+// crate; validate also reaches the game type, the best-response primitive, and the
+// authoritative range parser (the only parser that knows the weighted ":w" syntax the
+// authored ranges use) through here
+pub use postflop_solver::{
+    card_from_str, compute_exploitability, Action as SolverAction, Card, PostFlopGame,
+    Range as SolverRange,
+};
 
 /// Which street solving begins on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

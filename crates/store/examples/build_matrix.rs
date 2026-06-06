@@ -1,17 +1,23 @@
-//! Build the curated benchmark matrix (Phase 1).
+//! Build the curated benchmark matrix.
 //!
-//! Loads the curated spot list (`benchmark/spots.toml`), solves each spot with the `srp-v1` tree
-//! (config `phase1.toml`), asserts the internal invariants, stores each solved tree to `matrix/`,
-//! and runs the rs_poker equity cross-check on one spot. The curated stored set IS the benchmark.
+//! Loads the curated spot list (`benchmark/spots.toml`), solves each spot with its pot type's
+//! bet tree (config `phase1.toml` via `tree_for`; geometry + ranges from gto-preflop
+//! `spot_inputs`), asserts the internal invariants, stores each solved tree to `matrix/`, and
+//! runs the rs_poker equity cross-check once per pot type. The curated stored set IS the
+//! benchmark.
 //!
-//! Run from the repo root:  cargo run --release -p gto-store --example build_matrix
+//! Run from the repo root:  cargo run --release -p gto-store --example build_matrix [filter]
+//! The optional arg keeps only spots whose key contains the substring (e.g. one exact key
+//! for a cost pre-flight, or "3bp-v1" for one pot type) - already-stored spots outside the
+//! filter are never re-solved.
 
 use anyhow::{bail, Context, Result};
-use gto_config::{Config, SolveConfig};
+use gto_config::{Config, PotType, SolveConfig};
 use gto_engine::{solve_spot, Board, RakeSpec, Spot, SpotSolution, Street};
-use gto_preflop::{PreflopCharts, PreflopContext, PreflopNode};
+use gto_preflop::PreflopCharts;
 use gto_store::{spot_key, store_solution};
 use serde::Deserialize;
+use std::collections::BTreeSet;
 
 const EQUITY_TOLERANCE: f32 = 0.02; // 2 percentage points
 
@@ -20,10 +26,16 @@ struct SpotsFile {
     spot: Vec<SpotRow>,
 }
 
+fn default_pot_type() -> PotType {
+    PotType::Srp
+}
+
 #[derive(Debug, Deserialize)]
 struct SpotRow {
     board: String,
     stack_depth_bb: u32,
+    #[serde(default = "default_pot_type")]
+    pot_type: PotType,
 }
 
 struct Summary {
@@ -39,24 +51,54 @@ fn main() -> Result<()> {
     let charts = PreflopCharts::load_embedded()?;
     let spots_text = std::fs::read_to_string("benchmark/spots.toml")
         .context("reading benchmark/spots.toml")?;
-    let spots: SpotsFile = toml::from_str(&spots_text).context("parsing benchmark/spots.toml")?;
+    let mut spots: SpotsFile =
+        toml::from_str(&spots_text).context("parsing benchmark/spots.toml")?;
 
+    // optional substring filter on the would-be spot key (pre-flights, single-pot rebuilds)
+    let filter = std::env::args().nth(1).unwrap_or_default();
+    if !filter.is_empty() {
+        let cfg_ref = &cfg;
+        spots.spot.retain(|row| {
+            let tree_id = match cfg_ref.solve.tree_for(row.pot_type) {
+                Ok(t) => t.bet_tree_id.clone(),
+                Err(_) => return false,
+            };
+            format!("{}bb_{}_flop_{}", row.stack_depth_bb, row.board, tree_id).contains(&filter)
+        });
+        println!("filter '{}' -> {} spot(s)", filter, spots.spot.len());
+        if spots.spot.is_empty() {
+            bail!("filter '{}' matches no benchmark spots", filter);
+        }
+    }
+
+    let trees: Vec<String> = spots
+        .spot
+        .iter()
+        .map(|r| r.pot_type)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(|p| Ok(format!("{}={}", p.label(), cfg.solve.tree_for(p)?.bet_tree_id)))
+        .collect::<Result<_>>()?;
     println!(
-        "Building curated matrix: {} spots, tree '{}'",
+        "Building curated matrix: {} spots, trees [{}]",
         spots.spot.len(),
-        cfg.solve.bet_tree.bet_tree_id
+        trees.join(", ")
     );
 
     let mut summaries = Vec::new();
-    let mut cross_checked = false;
+    let mut cross_checked: BTreeSet<PotType> = BTreeSet::new();
 
     for row in &spots.spot {
         let spot = build_spot(row, &charts)?;
-        let base_key = spot_key(&spot, &cfg.solve.bet_tree);
-        println!("\n[{}] solving {}", summaries.len() + 1, base_key);
+        // the row's effective config: the active bet tree is the pot type's tree, so the
+        // engine, the store key, and the shrink fallback all see one consistent tree
+        let mut row_cfg = cfg.clone();
+        row_cfg.solve.bet_tree = cfg.solve.tree_for(row.pot_type)?.clone();
+        let base_key = spot_key(&spot, &row_cfg.solve.bet_tree);
+        println!("\n[{}] solving {} ({})", summaries.len() + 1, base_key, row.pot_type.label());
 
         // solve, with a RAM-ceiling shrink fallback (abort condition handling)
-        let (mut solution, used_cfg, shrunk) = solve_with_shrink(&spot, &cfg)?;
+        let (mut solution, used_cfg, shrunk) = solve_with_shrink(&spot, &row_cfg)?;
 
         // internal invariants (&mut: the game-layer checks navigate the tree)
         let report = gto_validate::check_invariants(&mut solution, &used_cfg);
@@ -74,10 +116,10 @@ fn main() -> Result<()> {
             path.display()
         );
 
-        // equity cross-check on the first spot
-        if !cross_checked {
+        // equity cross-check on the first spot of each pot type (the check is range- and
+        // pot-generic, but each pot type brings new authored ranges worth one cross-check)
+        if cross_checked.insert(row.pot_type) {
             run_cross_check(&solution)?;
-            cross_checked = true;
         }
 
         summaries.push(Summary {
@@ -96,18 +138,16 @@ fn main() -> Result<()> {
 
 fn build_spot(row: &SpotRow, charts: &PreflopCharts) -> Result<Spot> {
     let flop = parse_flop(&row.board)?;
-    let (oop_range, ip_range) = charts.ranges_for(&PreflopContext {
-        stack_depth_bb: row.stack_depth_bb,
-        node: PreflopNode::SingleRaisedPot,
-    })?;
+    // geometry + ranges from the single source (no pot/stack literals here)
+    let inputs = charts.spot_inputs(row.pot_type, row.stack_depth_bb)?;
     Ok(Spot {
         stack_depth_bb: row.stack_depth_bb,
         initial_street: Street::Flop,
         board: Board { flop, turn: None, river: None },
-        pot_bb: 5.0,
-        effective_stack_bb: row.stack_depth_bb as f64 - 2.5,
-        oop_range,
-        ip_range,
+        pot_bb: inputs.pot_bb,
+        effective_stack_bb: inputs.eff_stack_bb,
+        oop_range: inputs.oop_range,
+        ip_range: inputs.ip_range,
         rake: RakeSpec::default(),
     })
 }

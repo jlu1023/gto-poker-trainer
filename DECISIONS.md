@@ -273,6 +273,51 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   BB-crushed board - MDF's realization blind spot); threshold deliberately NOT retuned in
   the acceptance commit, left flagged for an operator calibration call.
 
+## 3-bet / 4-bet phase decisions (2026-06-06, Phase A)
+
+- **D48. Pot types as first-class config (`PotType` srp/3bp/4bp) with single-sourced
+  geometry.** The preflop line a flop spot came from is now selected by `PotType`
+  (gto-config, the DAG base; wire strings "srp"/"3bp"/"4bp" pinned by test) and resolved in
+  exactly two funnels: `SolveConfig::tree_for(pot)` (the bet tree; ids 3bp-v1/4bp-v1 live in
+  phase1.toml only) and `PreflopCharts::spot_inputs(pot, depth)` (ranges + pot + stacks,
+  stored NEXT to the ranges in hu_ranges.toml). The uniform HU law pot = 2*raise_to,
+  eff = depth - raise_to is asserted at LOAD time and the authored values (2.5 / 10 / 9 / 22)
+  are pinned by tests - this killed the `pot_bb: 5.0` / `depth - 2.5` literal class at all
+  four Rust sites (build_matrix, server solve, suit_isomorphism + the envelope's arithmetic
+  generalizes in Phase C). Canonical lines (operator-settled): 3-bet to 10bb@100 / 9bb@50
+  (pot 20/18, SPR 4.5/2.3); 4-bet to 22bb at 100bb ONLY (pot 44, SPR ~1.77; 50bb 4-bet pots
+  are jam-or-fold and stay out of scope with a precise envelope skip). Trees: 3bp-v1 EXTENDS
+  srp-v2 unchanged; 4bp-v1 DIFFERS (single 33% flop size + the 3x raise - at SPR 1.77 a 75%
+  line is all-in anyway). MEASURED at STOP A1 before the benchmark build (the srp-v2
+  estimate-miss lesson): 3bp@100 ~34-47s solve+store, 309,014 nodes, 168.8MB; 4bp@100 2.4s,
+  71,648 nodes, 2.2MB; zero shrinks; existing 900s/960s budgets hold with order-of-magnitude
+  margin. THE RANGES (the product): the committed SRP fractional weights RESERVED the 3-bet
+  mix, so the consistent BB 3-bet range is POLAR and small - 4.9%@100 / 4.0%@50 (premium
+  complements + budgeted blocker/suited bluffs), NOT the ~13% of merged HU constructions
+  (hands SRP-calling at 1.0 have zero 3-bet capacity); total defend 64.3%/57.5%. Surfaced to
+  the operator at STOP A1 with the arithmetic and approved. Consistency LAWS unit-tested per
+  combo before any solve: srp_call + 3bet <= 1, btn call3 + 4bet <= open, 4bet-call <= 3bet,
+  totals in band. Acceptance traces (the srp-v2 mechanistic discipline, applied via the new
+  defence_trace path-spec arg): the capped BTN caller raises the polar c-bet (17.8% raise
+  mass, top pair 45%, zero strong-class folds), the BB check range check-raises 23.9%, and
+  the 4bp 62.7% fold is composition-audited (QQ/JJ at 19.6% equity on K-high vs the 4-bet
+  range - range-driven, not mechanism-driven). 8 3bp + 2 4bp spots solved, all invariants
+  green, validate_matrix ALL 21 SPOTS PASS.
+- **D49. The equity cross-check is now villain-weight-CORRECT (was weight-blind, found by
+  F5 discipline at the first weighted-villain check).** The first 3bp cross-check read
+  |diff| 0.0180 (vs the srp-v2 exact 0.0000) - investigated BEFORE building on it: the
+  rs_poker RangeParser neither knows the weighted ":w" syntax (it also silently DROPPED
+  combos: 212 parsed vs 281 real) nor was the tally weighted (each combo counted 1/n while
+  the solver's equity is villain-reach-weighted). Fixed: the villain range is parsed by the
+  AUTHORITATIVE parser (postflop-solver via the engine re-export - range-string semantics
+  belong to the system under test; rs_poker remains the independent 7-card RANKER), the
+  tally weights each combo, and the psf-id -> rs_poker card mapping is built by parsing all
+  52 card strings through both parsers with a permutation check (no encoding arithmetic
+  assumed). Verified at the data layer: the weighted composition law and the degenerate
+  all-weights-1.0 equivalence are unit-tested; the 3bp re-check reconciled EXACTLY
+  (0.5478 == 0.5478). This was the audit's range-weight tripwire class surfacing at a new
+  code surface, caught by the guard-every-new-surface rule.
+
 ## Phase 4 findings
 
 - **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,

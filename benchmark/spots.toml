@@ -1,7 +1,10 @@
-# Curated benchmark batch (Phase 1). The curated stored set IS the validation benchmark set:
+# Curated benchmark batch. The curated stored set IS the validation benchmark set:
 # one list, not two. Spots are chosen for verifiability and texture coverage.
-# Context: heads-up single-raised pot, BB out of position vs BTN in position.
-# Each row becomes a matrix entry with key {depth}bb_{board}_flop_srp-v1.
+# Context: heads-up, BB out of position vs BTN in position. `pot_type` selects the preflop
+# line ("srp" default / "3bp" / "4bp"; geometry + ranges from gto-preflop spot_inputs, tree
+# from phase1.toml tree_for). Each row becomes a matrix entry keyed
+# {depth}bb_{board}_flop_{tree_id}. The 3bp/4bp rows reuse SRP boards deliberately:
+# cross-pot comparison on identical textures, and zero new boards for the gate registry.
 
 [[spot]]
 board = "Ks7h2c"          # dry rainbow high
@@ -38,3 +41,57 @@ stack_depth_bb = 50
 [[spot]]
 board = "8d6s3c"          # dry rainbow low-mid; de facto gate fixture (trainer CACHED_50,
 stack_depth_bb = 50       # review + viz fixtures) - solved on demand in Phase 3, curated now
+
+# --- 3-bet pots (BB 3-bet to 10/9bb, BTN called; BB is the flop AGGRESSOR, OOP) ---
+
+[[spot]]
+board = "9c5d3h"          # the canonical low board (SRP audit arc); direct cross-pot study
+stack_depth_bb = 100
+pot_type = "3bp"
+
+[[spot]]
+board = "Ks7h2c"          # dry rainbow high
+stack_depth_bb = 100
+pot_type = "3bp"
+
+[[spot]]
+board = "Jc9h8c"          # two-tone, wet / connected
+stack_depth_bb = 100
+pot_type = "3bp"
+
+[[spot]]
+board = "7h7d2c"          # paired, rainbow
+stack_depth_bb = 100
+pot_type = "3bp"
+
+[[spot]]
+board = "6c5d4h"          # low connected, rainbow
+stack_depth_bb = 100
+pot_type = "3bp"
+
+[[spot]]
+board = "8d6s3c"          # dry rainbow low-mid
+stack_depth_bb = 50
+pot_type = "3bp"
+
+[[spot]]
+board = "AcKhQd"          # broadway rainbow
+stack_depth_bb = 50
+pot_type = "3bp"
+
+[[spot]]
+board = "Qs8s5h"          # two-tone
+stack_depth_bb = 50
+pot_type = "3bp"
+
+# --- 4-bet pots (BTN 4-bet to 22bb, BB called; BTN aggressor, SPR ~1.77; 100bb only) ---
+
+[[spot]]
+board = "Ks7h2c"          # dry rainbow high
+stack_depth_bb = 100
+pot_type = "4bp"
+
+[[spot]]
+board = "9c5d3h"          # dry rainbow low
+stack_depth_bb = 100
+pot_type = "4bp"

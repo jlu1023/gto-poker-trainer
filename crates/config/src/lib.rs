@@ -9,6 +9,37 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// The HU preflop pot families the engine models. A pot type selects the preflop line
+/// (and thus the flop-entering pot, stacks, and ranges - see gto-preflop `spot_inputs`)
+/// and its own bet tree (`SolveConfig::tree_for`). The postflop engine itself stays
+/// numeric: `Spot` carries pot/stack values, never this enum.
+///
+/// Serde strings ("srp" / "3bp" / "4bp") are the wire format used by the server API and
+/// `benchmark/spots.toml`, and mirror the gate registry's `TREE_IDS` keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum PotType {
+    /// BTN opens, BB calls. IP (BTN) is the flop aggressor.
+    #[serde(rename = "srp")]
+    Srp,
+    /// BTN opens, BB 3-bets, BTN calls. OOP (BB) is the flop aggressor.
+    #[serde(rename = "3bp")]
+    ThreeBet,
+    /// BTN opens, BB 3-bets, BTN 4-bets, BB calls. IP (BTN) is the flop aggressor.
+    #[serde(rename = "4bp")]
+    FourBet,
+}
+
+impl PotType {
+    /// The wire/registry label ("srp" / "3bp" / "4bp").
+    pub fn label(self) -> &'static str {
+        match self {
+            PotType::Srp => "srp",
+            PotType::ThreeBet => "3bp",
+            PotType::FourBet => "4bp",
+        }
+    }
+}
+
 /// Top-level configuration aggregate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -35,8 +66,30 @@ pub struct SolveConfig {
     pub max_iterations: u32,
     /// Print solver progress to stdout.
     pub print_progress: bool,
+    /// The SRP bet tree (historical field name kept for TOML back-compat).
     pub bet_tree: BetTreeConfig,
+    /// The 3-bet-pot bet tree; absent means 3-bet pots are not configured for solving.
+    pub bet_tree_3bp: Option<BetTreeConfig>,
+    /// The 4-bet-pot bet tree; absent means 4-bet pots are not configured for solving.
+    pub bet_tree_4bp: Option<BetTreeConfig>,
     pub abstraction: AbstractionConfig,
+}
+
+impl SolveConfig {
+    /// The single funnel for tree selection: every consumer resolves a pot type's bet tree
+    /// here, so tree ids never re-appear as scattered literals (the TREE_ID lesson).
+    /// Errors cleanly when a pot type has no tree configured.
+    pub fn tree_for(&self, pot: PotType) -> anyhow::Result<&BetTreeConfig> {
+        match pot {
+            PotType::Srp => Ok(&self.bet_tree),
+            PotType::ThreeBet => self.bet_tree_3bp.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("no [solve.bet_tree_3bp] configured (3-bet pots unavailable)")
+            }),
+            PotType::FourBet => self.bet_tree_4bp.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("no [solve.bet_tree_4bp] configured (4-bet pots unavailable)")
+            }),
+        }
+    }
 }
 
 /// Bet-size tree, per street, per `[OOP, IP]` player. Strings are postflop-solver size
@@ -200,6 +253,8 @@ impl Default for SolveConfig {
             max_iterations: 1000,
             print_progress: true,
             bet_tree: BetTreeConfig::default(),
+            bet_tree_3bp: None,
+            bet_tree_4bp: None,
             abstraction: AbstractionConfig::default(),
         }
     }
@@ -285,5 +340,46 @@ mod tests {
         assert_eq!(c.solve.max_iterations, 250);
         // untouched field keeps its default
         assert_eq!(c.solve.chip_per_bb, 20);
+    }
+
+    #[test]
+    fn tree_for_resolves_srp_and_errors_on_unconfigured_pots() {
+        let c = Config::default();
+        assert_eq!(c.solve.tree_for(PotType::Srp).unwrap().bet_tree_id, "smoke-v0");
+        assert!(c.solve.tree_for(PotType::ThreeBet).is_err());
+        assert!(c.solve.tree_for(PotType::FourBet).is_err());
+    }
+
+    #[test]
+    fn optional_pot_trees_parse_from_toml() {
+        let toml = r#"
+            [solve.bet_tree_3bp]
+            bet_tree_id = "3bp-v1"
+            [solve.bet_tree_4bp]
+            bet_tree_id = "4bp-v1"
+        "#;
+        let c: Config = toml::from_str(toml).unwrap();
+        assert_eq!(c.solve.tree_for(PotType::ThreeBet).unwrap().bet_tree_id, "3bp-v1");
+        assert_eq!(c.solve.tree_for(PotType::FourBet).unwrap().bet_tree_id, "4bp-v1");
+        // the optional sections inherit BetTreeConfig defaults for unspecified fields
+        assert_eq!(
+            c.solve.bet_tree_3bp.as_ref().unwrap().flop_bet_sizes,
+            ["33%".to_string(), "33%".to_string()]
+        );
+    }
+
+    #[test]
+    fn pot_type_wire_format_is_stable() {
+        // the serde strings are load-bearing: server API field, spots.toml, registry keys
+        for (pot, s) in [
+            (PotType::Srp, "\"srp\""),
+            (PotType::ThreeBet, "\"3bp\""),
+            (PotType::FourBet, "\"4bp\""),
+        ] {
+            assert_eq!(serde_json::to_string(&pot).unwrap(), s);
+            let back: PotType = serde_json::from_str(s).unwrap();
+            assert_eq!(back, pot);
+            assert_eq!(format!("\"{}\"", pot.label()), s);
+        }
     }
 }

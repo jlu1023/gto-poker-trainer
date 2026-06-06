@@ -7,10 +7,16 @@
 //! Read-only over the cached matrix; never solves.
 //!
 //! Run from the repo root:
-//!   cargo run --release -p gto-validate --example defence_trace [spot-key] [bet-chips]
-//! Defaults: the srp-v2 100bb 9c5d3h spot, Bet(33).
+//!   cargo run --release -p gto-validate --example defence_trace [spot-key] [bet-chips] [path]
+//! Defaults: the srp-v2 100bb 9c5d3h spot, Bet(33), path [Check, Bet(bet-chips)].
+//!
+//! The optional 3rd arg is a path spec for non-SRP node shapes (tokens, left to right:
+//! `X` = Check, `B<chips>` = Bet(chips)); without it the original two-arg behavior is
+//! byte-identical. 3bp examples (the BB is the OOP aggressor, so the c-bet is at the ROOT):
+//!   defence_trace 100bb_9c5d3h_flop_3bp-v1 132 B132    # BTN (capped caller) vs the c-bet
+//!   defence_trace 100bb_9c5d3h_flop_3bp-v1 132 XB132   # BB vs the stab after check-through
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use gto_config::Config;
 use gto_engine::{query_node, read_node_weights, NodeQuery, SolverAction, Step};
 use gto_store::load_solution;
@@ -65,6 +71,32 @@ fn bucket(hand: &str, board: &[i32]) -> &'static str {
     "air/other"
 }
 
+/// Parse a path spec ("XB132" -> [Check, Bet(132)]). Tokens: `X` = Check, `B<chips>` = Bet.
+fn parse_path_spec(spec: &str) -> Result<Vec<Step>> {
+    let mut steps = Vec::new();
+    let mut chars = spec.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            'X' | 'x' => steps.push(Step::Action(SolverAction::Check)),
+            'B' | 'b' => {
+                let mut digits = String::new();
+                while let Some(d) = chars.peek().filter(|d| d.is_ascii_digit()) {
+                    digits.push(*d);
+                    chars.next();
+                }
+                let chips: i32 =
+                    digits.parse().map_err(|_| anyhow!("path spec '{spec}': B needs chips"))?;
+                steps.push(Step::Action(SolverAction::Bet(chips)));
+            }
+            other => bail!("path spec '{spec}': unknown token '{other}' (use X or B<chips>)"),
+        }
+    }
+    if steps.is_empty() {
+        bail!("path spec '{spec}' is empty");
+    }
+    Ok(steps)
+}
+
 fn main() -> Result<()> {
     let cfg = Config::load("phase1.toml").context("loading phase1.toml")?;
     let default_key = format!("100bb_9c5d3h_flop_{}", cfg.solve.bet_tree.bet_tree_id);
@@ -80,12 +112,24 @@ fn main() -> Result<()> {
         .map(|c| rank_idx(c.chars().next().unwrap()))
         .collect();
 
-    let q = NodeQuery {
-        path: vec![
+    // default path = the SRP acceptance shape [Check, Bet(bet_chips)]; a 3rd arg overrides
+    let path = match std::env::args().nth(3) {
+        Some(spec) => parse_path_spec(&spec)?,
+        None => vec![
             Step::Action(SolverAction::Check),
             Step::Action(SolverAction::Bet(bet_chips)),
         ],
     };
+    let path_label: String = path
+        .iter()
+        .map(|s| match s {
+            Step::Action(SolverAction::Check) => "Check".to_string(),
+            Step::Action(SolverAction::Bet(c)) => format!("Bet({c})"),
+            other => format!("{other:?}"),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    let q = NodeQuery { path };
     let node = query_node(&mut solution, &q)?;
     let w = read_node_weights(&mut solution.game, &q)?;
     let n = node.hands.len();
@@ -102,7 +146,7 @@ fn main() -> Result<()> {
         .map(|(i, _)| i)
         .collect();
 
-    println!("=== {key}  node [Check, Bet({bet_chips})]  player {} (0=BB) ===", node.player);
+    println!("=== {key}  node [{path_label}]  player {} (0=BB) ===", node.player);
     println!("  actions: {:?}", node.actions);
 
     // aggregates
@@ -164,7 +208,7 @@ fn main() -> Result<()> {
         })
         .collect();
     raisers.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-    println!("  hands check-raising >= 5% ({}):", raisers.len());
+    println!("  hands raising >= 5% ({}):", raisers.len());
     for (r, hand, eq) in raisers.iter().take(20) {
         println!(
             "    {:<6} raise {:>5.1}%  eq {:>5.1}%  [{}]",
