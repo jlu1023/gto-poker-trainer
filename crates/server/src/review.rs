@@ -17,7 +17,7 @@ use axum::response::{IntoResponse, Response};
 use gto_engine::grade::find_hand;
 use gto_engine::{hand_range_weight, query_node, NodeQuery, SolverAction, Step};
 use gto_history::aggregate::{aggregate, assert_record_sane, texture_bucket, GradedRecord};
-use gto_history::envelope::{Classified, GradeableDecision, NodeShape, SkipReason};
+use gto_history::envelope::{Classified, GradeableDecision, SkipReason};
 use gto_history::schema::HistoryFile;
 use gto_history::{classify_history, pstext, store as hstore};
 use gto_store::{load_manifest, load_solution};
@@ -27,7 +27,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gto_config::PotType;
 use crate::state::AppState;
 
 fn bad_request(message: String) -> Response {
@@ -38,8 +37,11 @@ fn store_path(state: &AppState) -> PathBuf {
     Path::new(&state.cfg.io.matrix_dir).join("history").join("graded.jsonl")
 }
 
-fn spot_key_for(d: &GradeableDecision, tree_id: &str) -> String {
-    format!("{}bb_{}_flop_{}", d.depth_bb, d.board.concat(), tree_id)
+/// The decision's spot key: the tree id resolves PER DECISION from its pot family (the
+/// 3bp-phase change - one ingest batch can span srp/3bp/4bp solves).
+fn spot_key_for(d: &GradeableDecision, cfg: &gto_config::Config) -> anyhow::Result<String> {
+    let tree_id = &cfg.solve.tree_for(d.pot_type)?.bet_tree_id;
+    Ok(format!("{}bb_{}_flop_{}", d.depth_bb, d.board.concat(), tree_id))
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +87,6 @@ pub async fn ingest_handler(
         Ok(m) => m,
         Err(e) => return bad_request(format!("reading matrix manifest: {e}")),
     };
-    let tree_id = &state.cfg.solve.bet_tree.bet_tree_id;
 
     let mut coverage: BTreeMap<&'static str, u32> = BTreeMap::new();
     let mut gradeable = Vec::new();
@@ -100,7 +101,10 @@ pub async fn ingest_handler(
                 let _ = (hand_id, decision_index, detail);
             }
             Classified::Gradeable(d) => {
-                let key = spot_key_for(&d, tree_id);
+                let key = match spot_key_for(&d, &state.cfg) {
+                    Ok(k) => k,
+                    Err(e) => return bad_request(format!("resolving tree for decision: {e}")),
+                };
                 let status = if manifest.spots.contains_key(&key) {
                     *coverage.entry("gradeable-cached").or_insert(0) += 1;
                     "cached"
@@ -184,16 +188,16 @@ fn grade_batch(
     source_file: &str,
 ) -> anyhow::Result<serde_json::Value> {
     let manifest = load_manifest(Path::new(&cfg.io.matrix_dir))?;
-    let tree_id = &cfg.solve.bet_tree.bet_tree_id;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs().to_string())
         .unwrap_or_default();
 
-    // group by spot key so each tree loads exactly once
+    // group by spot key so each tree loads exactly once (the key carries the decision's
+    // pot family via its tree id)
     let mut by_key: BTreeMap<String, Vec<GradeableDecision>> = BTreeMap::new();
     for d in decisions {
-        by_key.entry(spot_key_for(&d, tree_id)).or_default().push(d);
+        by_key.entry(spot_key_for(&d, cfg)?).or_default().push(d);
     }
 
     let mut records: Vec<GradedRecord> = Vec::new();
@@ -219,12 +223,16 @@ fn grade_batch(
             if nodes.contains_key(shape_key) {
                 continue;
             }
-            let node = match d.node_shape {
-                NodeShape::BbRoot => solution.root.clone(),
-                NodeShape::IpAfterCheck => query_node(
+            // HU postflop order is fixed (BB/OOP first in every pot family), so all six
+            // shapes resolve to two tree positions: the root, or the node after one check.
+            // The shape STRINGS keep pots separate downstream; the tree position is shared.
+            let node = if d.node_shape.hero_is_oop() {
+                solution.root.clone()
+            } else {
+                query_node(
                     &mut solution,
                     &NodeQuery { path: vec![Step::Action(SolverAction::Check)] },
-                )?,
+                )?
             };
             nodes.insert(shape_key, node);
         }
@@ -240,9 +248,10 @@ fn grade_batch(
             // well-defined at any weight > 0. The authored range weight only changes how
             // often the solver expects to HOLD the combo, which the instance-conditioned
             // framing never uses. Weight 0 (combo not in the range at all) still rejects.
-            let hero_range = match d.node_shape {
-                NodeShape::BbRoot => &solution.spot.oop_range,
-                NodeShape::IpAfterCheck => &solution.spot.ip_range,
+            let hero_range = if d.node_shape.hero_is_oop() {
+                &solution.spot.oop_range
+            } else {
+                &solution.spot.ip_range
             };
             match hand_range_weight(hero_range, &d.combo) {
                 Ok(w) if w > 0.0 => {}
@@ -273,11 +282,12 @@ fn grade_batch(
             }
 
             let rec = GradedRecord {
-                schema_version: 1,
+                schema_version: 2,
                 hand_id: d.hand_id.clone(),
                 street: d.street.clone(),
                 decision_index: d.decision_index,
                 depth_bb: d.depth_bb,
+                pot_bb: solution.spot.pot_bb,
                 node_shape: d.node_shape.key().to_string(),
                 texture: texture_bucket(&d.board).to_string(),
                 board: d.board.clone(),
@@ -321,14 +331,9 @@ pub async fn report_handler(State(state): State<AppState>) -> Response {
         }))
         .into_response();
     }
-    // SRP pot from the single source (depth-independent for srp: pot = 2 * 2.5bb). The
-    // graded store is SRP-only until the Phase C envelope extension, which threads
-    // per-record pots through aggregate instead of one report-wide value.
-    let pot_chips = match state.charts.spot_inputs(PotType::Srp, 50) {
-        Ok(i) => (i.pot_bb * state.cfg.solve.chip_per_bb as f64) as f32,
-        Err(e) => return bad_request(format!("srp inputs unavailable: {e}")),
-    };
-    match aggregate(&records, pot_chips, state.cfg.solve.chip_per_bb as f64, &state.cfg.review) {
+    // per-record pots since schema v2 (v1 rows default to the srp 5bb): aggregate scales
+    // each record's D45 epsilon by its own solved pot
+    match aggregate(&records, state.cfg.solve.chip_per_bb as f64, &state.cfg.review) {
         Ok(report) => axum::Json(json!({
             "report": report,
             "store_bad_lines": bad_lines,

@@ -106,8 +106,10 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   contract in `crates/history/src/schema.rs`) and reports AGGREGATE frequency leaks by node.
   Frequency, not sequence: no surface may emit a next-move recommendation. The GTO comparator is
   range-conditioned (D44, caveat ships in the payload); per-instance EV sanity asserts before
-  any record enters `matrix/history/graded.jsonl` (D45, the F5 tripwire). Out-of-envelope
-  decisions skip with precise reasons; never approximate or action-translate.
+  any record enters `matrix/history/graded.jsonl` (D45, the F5 tripwire - epsilon scales by
+  each record's own pot since schema v2). The envelope covers HU srp/3bp (50+100bb) and
+  4bp (100bb) check-to flop decisions (seat-checked raise sequences, per-depth size bands);
+  out-of-envelope decisions skip with precise reasons; never approximate or action-translate.
 - Gates: `verify_viz.py` (Phase 2), `verify_solve.py` (Phase 3), `verify_trainer.py` (Phase 4),
   `verify_review.py` (Phase 5), all run with the Python 3.12 interpreter that has Playwright
   (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`). Every board a gate

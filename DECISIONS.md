@@ -333,6 +333,29 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   OOP-aggressor action set); a cached 3bp trainer round through the commit gate (buttons ==
   the 3bp tree's actions). One trainer rerun after the known LNK1104 linker race poisoned
   its test step (engine tests 10/10 standalone).
+- **D51. Review envelope extended to 3-bet / 4-bet pots (Phase C).** The classifier's
+  raise-count arms are SEAT-CHECKED ([Btn]=srp, [Btn,Bb]=3bp, [Btn,Bb,Btn]=4bp, more =
+  five-bet-pot skip; non-alternating sequences are unparseable, never guessed), with
+  per-depth size bands (3-bet [9,11.5]@100 / [8,10.5]@50; 4-bet [19,26]@100; 4bp@50 skips
+  fourbet-depth-out-of-scope by decision). The blanket "3-bet-pot" skip reason is RETIRED.
+  Four new node shapes: 3bp-oop-root / 3bp-ip-after-check / 4bp-oop-root /
+  4bp-ip-after-check - one factual correction to the approved plan recorded here: the plan
+  named a "4bp-ip-root" on the assumption the 4-bet aggressor acts first, but HU postflop
+  order is fixed (BB/OOP first in EVERY pot family; the gate-measured 4bp root action set
+  [Check, Bet(290)] proves it), so all six shapes resolve to two tree positions (root /
+  after-one-check) selected by `hero_is_oop()`, while the pot-distinct shape STRINGS keep
+  aggregation pools separate. Two pots, two jobs, never crossed: hero-size mapping uses the
+  hand's ACTUAL pot (2 x the last raise-to); grading and D45 scale by the SOLVED spot's
+  pot. Flop size labels are chip-denominated per (pot, depth) via `tree_sizes_for`, and
+  byte-pinned against the real solved trees by the gate's end-to-end grading (g9's
+  Bet(132) c-bet), not by rounding assumptions. spot_key_for resolves the tree id PER
+  DECISION via tree_for. GradedRecord schema_version 1 -> 2: adds pot_bb (solved spot's
+  pot) so the D45 epsilon scales per record (a chip gap that fires at the srp 100-chip pot
+  is noise at the 4bp 880-chip pot - unit-tested both directions); v1 rows deserialize
+  with the srp default and aggregate unchanged (back-compat test). verify_review extended:
+  five gradeable 3bp/4bp synthetic hands against the cached benchmark, coverage >= 1 for
+  every new skip reason plus a retired-reason assertion, the F5 battery runs PER NODE
+  SHAPE with pot-scaled thresholds, and the trainer-reuse proof repeats on a 3bp record.
 
 ## Phase 4 findings
 

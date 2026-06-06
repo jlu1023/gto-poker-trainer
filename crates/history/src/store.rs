@@ -74,11 +74,12 @@ mod tests {
     fn rec(hand: &str, idx: u32) -> GradedRecord {
         let board = ["Ks".to_string(), "7h".to_string(), "2c".to_string()];
         GradedRecord {
-            schema_version: 1,
+            schema_version: 2,
             hand_id: hand.into(),
             street: "flop".into(),
             decision_index: idx,
             depth_bb: 100,
+            pot_bb: 5.0,
             node_shape: "bb-root".into(),
             texture: texture_bucket(&board).into(),
             board,

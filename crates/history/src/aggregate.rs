@@ -1,4 +1,4 @@
-//! Node aggregation (D40): operator action rates vs the solver's mixes, with EV cost.
+﻿//! Node aggregation (D40): operator action rates vs the solver's mixes, with EV cost.
 //!
 //! D44 boundary (stated wherever this output surfaces): the GTO comparator g(a) is the MEAN
 //! OF THE SOLVER'S MIXES FOR THE HANDS THE OPERATOR ACTUALLY HELD - it is range-conditioned,
@@ -22,7 +22,17 @@ use std::collections::BTreeMap;
 
 const RANK_ORDER: &str = "23456789TJQKA";
 
+fn default_pot_bb() -> f64 {
+    // schema v1 rows predate pot types and are all SRP (pot 5bb); the default makes them
+    // forward-readable without rewriting the store
+    5.0
+}
+
 /// One graded decision: the JSONL row and the aggregation input.
+/// schema_version 2 (3bp phase): adds `pot_bb`, the SOLVED spot's pot, so EV costs and the
+/// D45 epsilon scale per record instead of report-wide. v1 rows deserialize with the SRP
+/// default; node_shape strings ("3bp-oop-root" etc) keep multi-pot records in separate
+/// aggregation groups by construction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GradedRecord {
     pub schema_version: u32,
@@ -30,6 +40,9 @@ pub struct GradedRecord {
     pub street: String,
     pub decision_index: u32,
     pub depth_bb: u32,
+    /// The solved spot's starting pot in bb (scales chips -> bb and the D45 epsilon).
+    #[serde(default = "default_pot_bb")]
+    pub pot_bb: f64,
     pub node_shape: String,
     pub texture: String,
     pub board: [String; 3],
@@ -174,14 +187,16 @@ this report cannot detect range-construction leaks: if your arriving range is al
 GTO% moves with it.";
 
 /// Aggregate graded records into the leak report. Runs the D45 assertion on every record
-/// BEFORE any arithmetic; chip_per_bb converts chips to bb; pot_chips is the root pot (100).
+/// BEFORE any arithmetic, scaled by EACH record's own pot (multi-pot stores since the 3bp
+/// phase: a 4bp record's epsilon is 8.8x an srp record's); chip_per_bb converts chips to
+/// bb, which is pot-independent, so EV costs stay comparable across pot families.
 pub fn aggregate(
     records: &[GradedRecord],
-    pot_chips: f32,
     chip_per_bb: f64,
     cfg: &ReviewConfig,
 ) -> Result<Report> {
     for rec in records {
+        let pot_chips = (rec.pot_bb * chip_per_bb) as f32;
         assert_record_sane(rec, pot_chips, cfg)?;
     }
 
@@ -321,11 +336,12 @@ mod tests {
         let p_vec = p.to_vec();
         let ev_mix: f32 = p.iter().zip(ev.iter()).map(|(pi, ei)| pi * ei).sum();
         GradedRecord {
-            schema_version: 1,
+            schema_version: 2,
             hand_id: hand.into(),
             street: "flop".into(),
             decision_index: 0,
             depth_bb: 100,
+            pot_bb: 5.0,
             node_shape: "bb-root".into(),
             texture: texture_bucket(&[board[0].into(), board[1].into(), board[2].into()]).into(),
             board: [board[0].into(), board[1].into(), board[2].into()],
@@ -371,7 +387,7 @@ mod tests {
         ];
         // h3 is a different texture (Q-high rainbow-broadway same as Ks7h2c? Qd9h3s: top Q ->
         // rainbow-broadway too) -> same node bucket; intended: one node, two boards.
-        let report = aggregate(&records, 100.0, 20.0, &cfg()).unwrap();
+        let report = aggregate(&records, 20.0, &cfg()).unwrap();
         assert_eq!(report.nodes.len(), 1);
         let node = &report.nodes[0];
         assert_eq!(node.n, 3);
@@ -404,7 +420,7 @@ mod tests {
             rec("h1", ["Ks", "7h", "2c"], "Check", [0.01, 0.99, 0.0], [100.0, 100.3, 99.0]),
             rec("h2", ["Ks", "7h", "2c"], "Check", [0.01, 0.99, 0.0], [100.0, 100.3, 99.0]),
         ];
-        let report = aggregate(&records, 100.0, 20.0, &cfg()).unwrap();
+        let report = aggregate(&records, 20.0, &cfg()).unwrap();
         assert!(!report.nodes[0].ranked, "2 instances must never rank as a leak");
     }
 
@@ -415,7 +431,7 @@ mod tests {
         let mut bad = rec("h1", ["Ks", "7h", "2c"], "Bet(33)",
             [0.40, 0.60, 0.0], [100.0, 135.0, 99.0]);
         bad.ev_mix = 102.0; // a plausible-looking mix EV; Bet(33) at 135 beats it by 33
-        let err = aggregate(&[bad], 100.0, 20.0, &cfg()).unwrap_err();
+        let err = aggregate(&[bad], 20.0, &cfg()).unwrap_err();
         assert!(err.to_string().contains("D45"), "got: {err}");
     }
 
@@ -427,9 +443,45 @@ mod tests {
             .map(|i| rec(&format!("h{i}"), ["Ks", "7h", "2c"], "Bet(33)",
                 [0.0, 1.0, 0.0], [100.0, 101.0, 99.0]))
             .collect();
-        let report = aggregate(&records, 100.0, 20.0, &cfg()).unwrap();
+        let report = aggregate(&records, 20.0, &cfg()).unwrap();
         let node = &report.nodes[0];
         assert_eq!(node.z[1], 0.0);
         assert!(!node.ranked);
+    }
+
+    /// Schema v1 JSONL rows (pre-pot, no pot_bb field) must stay readable: they default to
+    /// the SRP 5bb pot and aggregate exactly as before. The stored history is personal data
+    /// accumulated across sessions - a schema bump may never strand it.
+    #[test]
+    fn v1_rows_without_pot_bb_deserialize_with_srp_default() {
+        let v1 = r#"{"schema_version":1,"hand_id":"old1","street":"flop","decision_index":0,
+            "depth_bb":100,"node_shape":"bb-root","texture":"rainbow-broadway",
+            "board":["Ks","7h","2c"],"combo":"AhKh","action_taken":"Check",
+            "actions":["Check","Bet(33)","Bet(75)"],"p":[0.9,0.05,0.05],"ev_mix":100.0,
+            "ev_actions":[100.0,99.0,98.0],"source_file":"t","ingested_at":"t"}"#;
+        let old: GradedRecord = serde_json::from_str(v1).unwrap();
+        assert_eq!(old.pot_bb, 5.0);
+        // and it flows through aggregation (D45 epsilon scaled by the defaulted pot)
+        let report = aggregate(&[old], 20.0, &cfg()).unwrap();
+        assert_eq!(report.total_records, 1);
+    }
+
+    /// Multi-pot D45 scaling: an EV gap that is a violation at the srp pot (100 chips) is
+    /// legitimate noise at the 4bp pot (880 chips) - the epsilon must follow the record.
+    #[test]
+    fn d45_epsilon_scales_with_the_record_pot() {
+        // gap of 2.4 chips on a played action: srp eps = 2% x 100 = 2.0 (fires);
+        // 4bp eps = 2% x 880 = 17.6 (does not)
+        let mut srp = rec("h1", ["Ks", "7h", "2c"], "Bet(33)",
+            [0.40, 0.60, 0.0], [100.0, 104.4, 99.0]);
+        srp.ev_mix = 102.0;
+        let err = aggregate(&[srp.clone()], 20.0, &cfg()).unwrap_err();
+        assert!(err.to_string().contains("D45"), "srp-scale gap must fire: {err}");
+
+        let mut fourbet = srp;
+        fourbet.pot_bb = 44.0;
+        fourbet.node_shape = "4bp-oop-root".into();
+        aggregate(&[fourbet], 20.0, &cfg())
+            .expect("the same chip gap is within the 4bp epsilon");
     }
 }

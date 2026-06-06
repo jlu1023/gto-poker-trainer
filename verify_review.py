@@ -87,6 +87,16 @@ def srp_preflop(open_bb=2.5):
     return [ev_action("btn", "raise", open_bb), ev_action("bb", "call", open_bb - 1.0)]
 
 
+def threebet_preflop(threebet_to=10.0):
+    return [ev_action("btn", "raise", 2.5), ev_action("bb", "raise", threebet_to),
+            ev_action("btn", "call", threebet_to - 2.5)]
+
+
+def fourbet_preflop(fourbet_to=22.0, threebet_to=10.0):
+    return [ev_action("btn", "raise", 2.5), ev_action("bb", "raise", threebet_to),
+            ev_action("btn", "raise", fourbet_to), ev_action("bb", "call", fourbet_to - threebet_to)]
+
+
 def hand(hid, **kw):
     base = {
         "hand_id": hid, "source": "gate", "table_size_dealt": 2, "hero_seat": "bb",
@@ -127,6 +137,25 @@ def build_fixture(pending_board):
                   flop={"cards": ["Ks", "7h", "2c"],
                         "actions": [ev_action("bb", "check"), ev_action("btn", "bet", 1.65),
                                     ev_action("bb", "call", 1.65)]}))
+    # 3bp / 4bp gradeable hands (Phase C: these pots are IN the envelope, graded against
+    # the cached 3bp-v1 / 4bp-v1 benchmark entries; hero combos chosen from the authored
+    # 3bp/4bp ranges with no board blocks). g9's Bet(132) is the LABEL PIN: the envelope's
+    # chip-denominated size labels must byte-match the solved trees or grading fails here.
+    h.append(hand("g8", preflop=threebet_preflop(),
+                  flop={"cards": ["9c", "5d", "3h"],
+                        "actions": [ev_action("bb", "check")]}))               # 3bp-oop-root
+    h.append(hand("g9", preflop=threebet_preflop(),
+                  flop={"cards": ["Ks", "7h", "2c"],
+                        "actions": [ev_action("bb", "bet", 6.6)]}))            # 3bp c-bet -> Bet(132)
+    h.append(hand("g10", hero_seat="btn", hero_cards="TsTd", preflop=threebet_preflop(),
+                  flop={"cards": ["Jc", "9h", "8c"],
+                        "actions": [ev_action("bb", "check"), ev_action("btn", "check")]}))  # 3bp-ip-after-check
+    h.append(hand("g11", hero_cards="QdQc", preflop=fourbet_preflop(),
+                  flop={"cards": ["Ks", "7h", "2c"],
+                        "actions": [ev_action("bb", "check")]}))               # 4bp-oop-root
+    h.append(hand("g12", hero_seat="btn", hero_cards="AsAh", preflop=fourbet_preflop(),
+                  flop={"cards": ["9c", "5d", "3h"],
+                        "actions": [ev_action("bb", "check"), ev_action("btn", "check")]}))  # 4bp-ip-after-check
     # pending: gradeable shape on a NEVER-solved board (must NOT be solved by this gate)
     h.append(hand("p1", hero_cards="AsAc",
                   stacks_bb={"btn": 50.0, "bb": 50.0},
@@ -134,8 +163,7 @@ def build_fixture(pending_board):
                         "actions": [ev_action("bb", "check")]}))
     # skip reasons
     h.append(hand("s1", table_size_dealt=6))                                  # not-heads-up
-    h.append(hand("s2", preflop=[ev_action("btn", "raise", 2.5), ev_action("bb", "raise", 9.0),
-                                 ev_action("btn", "call", 6.5)]))             # 3-bet-pot
+    h.append(hand("s2", preflop=threebet_preflop(14.0)))                      # threebet-size-out-of-band
     h.append(hand("s3", preflop=[ev_action("btn", "call", 0.5), ev_action("bb", "check")]))  # limped
     h.append(hand("s4", preflop=srp_preflop(3.0)))                            # open-size-out-of-band
     h.append(hand("s5", stacks_bb={"btn": 75.0, "bb": 75.0}))                 # depth-out-of-band
@@ -145,6 +173,12 @@ def build_fixture(pending_board):
     h.append(hand("s8", preflop=[ev_action("btn", "raise", 2.5), ev_action("bb", "fold")],
                   flop=None))                                                  # hero-folded-preflop
     h.append(hand("s9", ante_bb=0.5))                                          # ante-pot
+    h.append(hand("s10", preflop=[ev_action("btn", "raise", 2.5), ev_action("bb", "raise", 10.0),
+                                  ev_action("btn", "raise", 22.0), ev_action("bb", "raise", 60.0),
+                                  ev_action("btn", "call", 38.0)]))           # five-bet-pot
+    h.append(hand("s11", preflop=fourbet_preflop(30.0)))                      # fourbet-size-out-of-band
+    h.append(hand("s12", stacks_bb={"btn": 50.0, "bb": 50.0},
+                  preflop=fourbet_preflop(20.0, 9.0)))                        # fourbet-depth-out-of-scope
     return {"hands": h}
 
 
@@ -211,10 +245,11 @@ def main():
             sys.exit(1)
         cov = ing["coverage"]
         expect_reasons = {
-            "not-heads-up": 1, "3-bet-pot": 1, "limped-pot": 1, "open-size-out-of-band": 1,
-            "depth-out-of-band": 1, "off-tree-hero-size": 1, "hero-cards-unknown": 1,
-            "hero-folded-preflop": 1, "ante-pot": 1, "turn-decision": 1, "facing-bet-on-flop": 1,
-            "gradeable-needs-solve": 1,
+            "not-heads-up": 1, "threebet-size-out-of-band": 1, "limped-pot": 1,
+            "open-size-out-of-band": 1, "depth-out-of-band": 1, "off-tree-hero-size": 1,
+            "hero-cards-unknown": 1, "hero-folded-preflop": 1, "ante-pot": 1,
+            "turn-decision": 1, "facing-bet-on-flop": 1, "gradeable-needs-solve": 1,
+            "five-bet-pot": 1, "fourbet-size-out-of-band": 1, "fourbet-depth-out-of-scope": 1,
         }
         for reason, min_count in expect_reasons.items():
             got = cov.get(reason, 0)
@@ -222,6 +257,12 @@ def main():
             print(f"  {tag}  coverage[{reason}] = {got} (>= {min_count})")
             if tag == "FAIL":
                 all_pass = False
+        # the pre-pot blanket "3-bet-pot" reason is RETIRED: 3-bet pots are in the envelope
+        if "3-bet-pot" not in cov:
+            print("  PASS  retired '3-bet-pot' blanket skip no longer fires")
+        else:
+            print(f"  FAIL  retired '3-bet-pot' reason still fired ({cov['3-bet-pot']}x)")
+            all_pass = False
         if ing["hands"] == len(fixture["hands"]):
             print(f"  PASS  hand count reconciles: {ing['hands']} in == {len(fixture['hands'])} parsed")
         else:
@@ -230,10 +271,11 @@ def main():
         gradeable = ing["gradeable"]
         cached_g = [g for g in gradeable if g["status"] == "cached"]
         fresh_g = [g for g in gradeable if g["status"] == "fresh"]
-        if len(cached_g) == 7 and len(fresh_g) == 1:
-            print(f"  PASS  gradeable split: {len(cached_g)} cached + {len(fresh_g)} fresh (p1)")
+        if len(cached_g) == 12 and len(fresh_g) == 1:
+            print(f"  PASS  gradeable split: {len(cached_g)} cached (7 srp + 3 3bp + 2 4bp) "
+                  f"+ {len(fresh_g)} fresh (p1)")
         else:
-            print(f"  FAIL  gradeable split: {len(cached_g)} cached / {len(fresh_g)} fresh (want 7/1)")
+            print(f"  FAIL  gradeable split: {len(cached_g)} cached / {len(fresh_g)} fresh (want 12/1)")
             all_pass = False
         if "coverage_note" in ing and "roadmap" in ing["coverage_note"]:
             print("  PASS  expectation-setting coverage note present")
@@ -248,9 +290,9 @@ def main():
         if st != 200:
             print(f"FAIL  grade: HTTP {st} {gr}")
             sys.exit(1)
-        ok = (gr["graded"] == 7 and gr["appended"] == 7 and gr["duplicates"] == 0
+        ok = (gr["graded"] == 12 and gr["appended"] == 12 and gr["duplicates"] == 0
               and len(gr["pending"]) == 1 and len(gr["errors"]) == 0)
-        print(f"  {'PASS' if ok else 'FAIL'}  graded {gr['graded']}/7, appended {gr['appended']}, "
+        print(f"  {'PASS' if ok else 'FAIL'}  graded {gr['graded']}/12, appended {gr['appended']}, "
               f"pending {len(gr['pending'])}/1, errors {len(gr['errors'])}")
         if not ok:
             print(f"        detail: {json.dumps(gr)[:400]}")
@@ -259,49 +301,62 @@ def main():
         # idempotency: same batch again -> all duplicates
         st, gr2 = api("/api/review/grade",
                       {"decisions": [g["decision"] for g in gradeable], "source_file": "gate"})
-        if gr2["appended"] == 0 and gr2["duplicates"] == 7:
-            print(f"  PASS  re-ingestion idempotent: 0 appended, 7 duplicates")
+        if gr2["appended"] == 0 and gr2["duplicates"] == 12:
+            print(f"  PASS  re-ingestion idempotent: 0 appended, 12 duplicates")
         else:
             print(f"  FAIL  idempotency: appended {gr2['appended']}, duplicates {gr2['duplicates']}")
             all_pass = False
 
-        # ---- 5. read_node F5 battery AT the [Check] node ----
-        print("\n=== 5. F5 battery at the ip-after-check node (gate addition) ===")
+        # ---- 5. read_node F5 battery, PER NODE SHAPE (F5 is never assumed to transfer to
+        # an untested shape; thresholds scale with each record's own pot since the chips
+        # magnitudes do - 2% pot for played-spread, 1% pot for dominance) ----
+        print("\n=== 5. F5 battery per node shape (incl. the four new 3bp/4bp shapes) ===")
         records = [json.loads(l) for l in STORE.read_text().splitlines() if l.strip()]
-        ip_records = [r for r in records if r["node_shape"] == "ip-after-check"]
-        if len(ip_records) >= 3:
-            print(f"  PASS  {len(ip_records)} ip-after-check records graded (g3, g4, g5)")
-        else:
-            print(f"  FAIL  only {len(ip_records)} ip-after-check records")
-            all_pass = False
-        worst_dot, worst_spread, worst_dom, purest = 0.0, 0.0, 0.0, None
-        for r in ip_records:
-            dot = sum(p * e for p, e in zip(r["p"], r["ev_actions"]))
-            worst_dot = max(worst_dot, abs(dot - r["ev_mix"]))
-            played = [e for p, e in zip(r["p"], r["ev_actions"]) if p >= 0.10]
-            if len(played) > 1:
-                worst_spread = max(worst_spread, max(played) - min(played))
-            best_played = max((e for p, e in zip(r["p"], r["ev_actions"]) if p >= 0.01),
-                              default=max(r["ev_actions"]))
-            worst_dom = max(worst_dom, max(r["ev_actions"]) - best_played)
-            mp = max(r["p"])
-            if purest is None or mp > max(purest["p"]):
-                purest = r
-        t1 = "PASS" if worst_dot < 0.05 else "FAIL"
-        t2 = "PASS" if worst_spread <= 2.0 else "FAIL"
-        t3 = "PASS" if worst_dom <= 1.0 else "FAIL"
-        print(f"  {t1}  ev_mix == dot(p, ev_actions): max |err| {worst_dot:.4f} chips")
-        print(f"  {t2}  played-action EV spread at [Check] node: worst {worst_spread:.3f} chips "
-              f"(F5 would show 30+)")
-        print(f"  {t3}  no dominant unplayed action: worst {worst_dom:.3f} chips")
-        if "FAIL" in (t1, t2, t3):
-            all_pass = False
-        if purest and max(purest["p"]) >= 0.90:
+        expected_shapes = {
+            "ip-after-check": 3,        # g3, g4, g5
+            "3bp-oop-root": 2,          # g8, g9 (the aggressor c-bet node)
+            "3bp-ip-after-check": 1,    # g10 (the capped caller)
+            "4bp-oop-root": 1,          # g11
+            "4bp-ip-after-check": 1,    # g12
+        }
+        for shape, min_n in expected_shapes.items():
+            shape_records = [r for r in records if r["node_shape"] == shape]
+            if len(shape_records) < min_n:
+                print(f"  FAIL  only {len(shape_records)} {shape} records (want >= {min_n})")
+                all_pass = False
+                continue
+            worst_dot, worst_spread, worst_dom = 0.0, 0.0, 0.0
+            spread_lim, dom_lim, dot_lim = 0.0, 0.0, 0.0
+            for r in shape_records:
+                pot_chips = r.get("pot_bb", 5.0) * 20.0
+                dot_lim = max(dot_lim, max(0.05, 0.0002 * pot_chips))
+                spread_lim = max(spread_lim, 0.02 * pot_chips)
+                dom_lim = max(dom_lim, 0.01 * pot_chips)
+                dot = sum(p * e for p, e in zip(r["p"], r["ev_actions"]))
+                worst_dot = max(worst_dot, abs(dot - r["ev_mix"]))
+                played = [e for p, e in zip(r["p"], r["ev_actions"]) if p >= 0.10]
+                if len(played) > 1:
+                    worst_spread = max(worst_spread, max(played) - min(played))
+                best_played = max((e for p, e in zip(r["p"], r["ev_actions"]) if p >= 0.01),
+                                  default=max(r["ev_actions"]))
+                worst_dom = max(worst_dom, max(r["ev_actions"]) - best_played)
+            ok_shape = (worst_dot < dot_lim and worst_spread <= spread_lim
+                        and worst_dom <= dom_lim)
+            print(f"  {'PASS' if ok_shape else 'FAIL'}  {shape} (n={len(shape_records)}): "
+                  f"dot|err| {worst_dot:.4f}<{dot_lim:.2f}  spread {worst_spread:.2f}<="
+                  f"{spread_lim:.1f}  dom {worst_dom:.2f}<={dom_lim:.1f} chips")
+            if not ok_shape:
+                all_pass = False
+        # near-pure argmax check on the purest record anywhere (scale-aware)
+        purest = max(records, key=lambda r: max(r["p"]))
+        if max(purest["p"]) >= 0.90:
             am = purest["p"].index(max(purest["p"]))
             loss = max(purest["ev_actions"]) - purest["ev_actions"][am]
-            t = "PASS" if loss <= 0.2 else "FAIL"
-            print(f"  {t}  near-pure IP hand {purest['combo']} ({max(purest['p'])*100:.0f}% "
-                  f"{purest['actions'][am]}): argmax loss {loss:.3f} chips")
+            lim = 0.002 * purest.get("pot_bb", 5.0) * 20.0
+            t = "PASS" if loss <= max(0.2, lim) else "FAIL"
+            print(f"  {t}  near-pure hand {purest['combo']} ({purest['node_shape']}, "
+                  f"{max(purest['p'])*100:.0f}% {purest['actions'][am]}): argmax loss "
+                  f"{loss:.3f} chips")
             if t == "FAIL":
                 all_pass = False
 
@@ -320,12 +375,24 @@ def main():
         if not ok:
             all_pass = False
 
+        # the same proof for a 3bp record: review and trainer must read the SAME 3bp solve
+        g8 = next(r for r in records if r["hand_id"] == "g8")
+        st, tg3 = api("/api/grade", {"board": ["9c", "5d", "3h"], "depth": 100,
+                                     "pot_type": "3bp", "hand": "AhKh", "action": "Check"})
+        ci3 = g8["actions"].index("Check")
+        ok3 = (st == 200 and abs(tg3["frequency"] - g8["p"][ci3]) < 1e-5
+               and abs(tg3["ev_chosen"] - g8["ev_actions"][ci3]) < 1e-3)
+        print(f"  {'PASS' if ok3 else 'FAIL'}  3bp AhKh@9c5d3h Check: review p={g8['p'][ci3]:.4f} "
+              f"vs trainer freq={tg3.get('frequency', -1):.4f} (same 3bp-v1 solve)")
+        if not ok3:
+            all_pass = False
+
         # ---- 7. report ----
         print("\n=== 7. Aggregate report ===")
         st, rep = api("/api/review/report")
         report = rep.get("report", {})
-        ok = (st == 200 and report.get("total_records") == 7
-              and report.get("distinct_hands") == 7
+        ok = (st == 200 and report.get("total_records") == 12
+              and report.get("distinct_hands") == 12
               and "range-conditioned" in report.get("comparator_caveat", ""))
         print(f"  {'PASS' if ok else 'FAIL'}  report: {report.get('total_records')} records, "
               f"{report.get('distinct_hands')} hands, D44 caveat shipped in payload")
