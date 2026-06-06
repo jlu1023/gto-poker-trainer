@@ -1,0 +1,22 @@
+# GTO Lab desktop shell (Tauri v2). Deliberately OUTSIDE the engine workspace (root
+# Cargo.toml excludes desktop/): Tauri's dependency tree and lockfile stay clear of the
+# pinned-solver workspace, which remains byte-identical for the gates. Packaging only -
+# no GTO logic lives here.
+[package]
+name = "gto-lab-desktop"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+# sidecar spawn/kill (P2 lifecycle) + readiness checks
+tauri-plugin-shell = "2"
+serde_json = "1"
+
+[profile.release]
+strip = true

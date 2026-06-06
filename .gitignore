@@ -2,6 +2,12 @@
 /target
 # python bytecode from the verifiers importing verifier_boards
 __pycache__/
+# Tauri desktop shell: its own target tree, npm tooling, generated schemas, and the
+# provisioned sidecar binary (re-copied from target/release by provision-sidecar.ps1)
+/desktop/src-tauri/target/
+/desktop/node_modules/
+/desktop/src-tauri/gen/
+/desktop/src-tauri/binaries/
 # matrix generation archives (rollback states; delete once srp-v2 settles)
 /matrix.pre-rangefix/
 /matrix.pre-srpv2/

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "GTO Lab main window: core defaults only. The sidecar is spawned and killed from the RUST side (setup hook / ExitRequested), so no shell permissions are exposed to the webview.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "gto-lab-desktop-tooling",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2"
+  }
+}

@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# the Tauri desktop shell has its own dependency tree + lockfile, deliberately outside
+# this workspace so the pinned-solver engine workspace stays byte-identical for the gates
+exclude = ["desktop/src-tauri"]
 
 [workspace.package]
 edition = "2021"
