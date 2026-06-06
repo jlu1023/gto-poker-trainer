@@ -16,11 +16,14 @@
 //! Run from the repo root:  cargo run --release -p gto-validate --example theory_advisory
 
 use anyhow::{anyhow, Context, Result};
-use gto_config::Config;
+use gto_config::{Config, PotType};
 use gto_engine::{query_node, read_node_weights, NodeQuery, NodeStrategy, SolverAction, Step};
 use gto_history::aggregate::texture_bucket;
 use gto_store::{load_manifest, load_solution};
-use gto_validate::advisory::{assess_cbet, assess_mdf, CbetAssessment, MdfAssessment};
+use gto_validate::advisory::{
+    assess_cbet, assess_cbet_pot, assess_mdf, assess_mdf_pot, calibration_for, CbetAssessment,
+    MdfAssessment,
+};
 use std::path::Path;
 
 /// Range-weighted frequency of one action at a node: sum_i w_i p_i(action) / sum_i w_i.
@@ -58,7 +61,14 @@ fn action_index(node: &NodeStrategy, label: &str) -> Option<usize> {
     node.actions.iter().position(|a| a == label)
 }
 
-fn print_mdf(context: &str, a: &MdfAssessment) {
+fn print_mdf(context: &str, calibrated: bool, a: &MdfAssessment) {
+    let verdict = if a.flagged {
+        "FLAG (worth a look - likely a range signal, not solver error)"
+    } else if calibrated {
+        "ok"
+    } else {
+        "measured (uncalibrated)"
+    };
     println!(
         "    {context}: bet {:.0} into {:.0}  MDF floor {:.1}%  actual defence {:.1}%  gap {:+.1} pts  {}",
         a.bet_chips,
@@ -66,13 +76,13 @@ fn print_mdf(context: &str, a: &MdfAssessment) {
         a.mdf_floor * 100.0,
         a.actual_defence * 100.0,
         a.gap * 100.0,
-        if a.flagged { "FLAG (worth a look - likely a range signal, not solver error)" } else { "ok" }
+        verdict
     );
 }
 
-fn print_cbet(a: &CbetAssessment) {
+fn print_cbet(label: &str, a: &CbetAssessment) {
     println!(
-        "    c-bet: {:.1}% on {} ({})  {}",
+        "    {label}: {:.1}% on {} ({})  {}",
         a.cbet_freq * 100.0,
         a.texture,
         a.expectation,
@@ -91,78 +101,119 @@ fn main() -> Result<()> {
     );
 
     let cfg = Config::load("phase1.toml").context("loading phase1.toml")?;
-    let tree_suffix = format!("_{}", cfg.solve.bet_tree.bet_tree_id);
     let manifest = load_manifest(Path::new(&cfg.io.matrix_dir))?;
-    let mut keys: Vec<&String> = manifest
-        .spots
-        .keys()
-        .filter(|k| k.ends_with(&tree_suffix))
-        .collect();
-    keys.sort();
-    println!(
-        "{} stored {} spot(s); cached reads only, nothing is solved\n",
-        keys.len(),
-        cfg.solve.bet_tree.bet_tree_id
-    );
-
     let mut total_flags = 0usize;
 
-    for key in keys {
-        let mut solution = load_solution(key, &cfg)?;
-        let pot_chips = (solution.spot.pot_bb * cfg.solve.chip_per_bb as f64) as f32;
-        let board = solution.spot.board.flop.clone();
-        let texture = texture_bucket(&board);
-        println!("=== {key} ===  board {} {} {}  pot {:.0} chips  texture {texture}",
-            board[0], board[1], board[2], pot_chips);
+    // every configured pot family, each under its own framing. HU node geometry is fixed
+    // (BB/OOP acts first in every pot), so the node PATHS are shared; what changes per pot
+    // is which node carries the "c-bet" reading (the AGGRESSOR's opening node: the root
+    // for the 3bp OOP 3-bettor, the after-check node for the srp/4bp IP aggressor), the
+    // labels, and the calibration state.
+    for pot in [PotType::Srp, PotType::ThreeBet, PotType::FourBet] {
+        let Ok(tree) = cfg.solve.tree_for(pot) else {
+            println!("--- {} not configured; skipped ---\n", pot.label());
+            continue;
+        };
+        let tree_suffix = format!("_{}", tree.bet_tree_id);
+        let mut keys: Vec<&String> =
+            manifest.spots.keys().filter(|k| k.ends_with(&tree_suffix)).collect();
+        keys.sort();
+        let cal = calibration_for(pot);
+        println!(
+            "--- {} ({}): {} stored spot(s){} ---\n",
+            pot.label(),
+            tree.bet_tree_id,
+            keys.len(),
+            if cal.calibrated { "" } else { "  [UNCALIBRATED: measuring pass, no flags]" }
+        );
+        // per-pot framing labels (the aggressor flips; the defender positions do not)
+        let (cbet_at_root, cbet_label, root_bet_def_label, checked_bet_def_label) = match pot {
+            PotType::ThreeBet => (
+                true,
+                "OOP 3-bettor c-bet (root)",
+                "IP caller vs c-bet",
+                "OOP vs stab after check-through",
+            ),
+            PotType::FourBet => (
+                false,
+                "IP 4-bettor c-bet (after check)",
+                "IP vs OOP lead",
+                "OOP caller vs c-bet",
+            ),
+            PotType::Srp => {
+                (false, "IP c-bet (after check)", "IP vs BB lead", "BB vs c-bet")
+            }
+        };
 
-        // ---- Check B: c-bet frequency (IP's bet mix after the BB checks) ----
-        let cbet_query = NodeQuery { path: vec![Step::Action(SolverAction::Check)] };
-        let cbet_node = query_node(&mut solution, &cbet_query)?;
-        let cbet_weights = read_node_weights(&mut solution.game, &cbet_query)?;
-        let mut cbet_freq = 0.0f32;
-        for (idx, _, _) in bet_actions(&cbet_node) {
-            cbet_freq += weighted_freq(&cbet_node, &cbet_weights, idx)?;
-        }
-        let cbet = assess_cbet(texture, cbet_freq);
-        print_cbet(&cbet);
-        total_flags += cbet.flagged as usize;
+        for key in keys {
+            let mut solution = load_solution(key, &cfg)?;
+            let pot_chips = (solution.spot.pot_bb * cfg.solve.chip_per_bb as f64) as f32;
+            let board = solution.spot.board.flop.clone();
+            let texture = texture_bucket(&board);
+            println!("=== {key} ===  board {} {} {}  pot {:.0} chips  texture {texture}",
+                board[0], board[1], board[2], pot_chips);
 
-        // ---- Check A: MDF at every flop opening-bet-facing node ----
-        // BB defending the c-bet: path [Check, Bet(s)]
-        for (_, chips, act) in bet_actions(&cbet_node) {
-            let q = NodeQuery {
-                path: vec![Step::Action(SolverAction::Check), Step::Action(act)],
+            // ---- Check B: the aggressor's opening-bet frequency ----
+            let after_check_query = NodeQuery { path: vec![Step::Action(SolverAction::Check)] };
+            let cbet_freq = if cbet_at_root {
+                let weights = read_node_weights(&mut solution.game, &NodeQuery { path: vec![] })?;
+                let mut f = 0.0f32;
+                for (idx, _, _) in bet_actions(&solution.root) {
+                    f += weighted_freq(&solution.root, &weights, idx)?;
+                }
+                f
+            } else {
+                let node = query_node(&mut solution, &after_check_query)?;
+                let weights = read_node_weights(&mut solution.game, &after_check_query)?;
+                let mut f = 0.0f32;
+                for (idx, _, _) in bet_actions(&node) {
+                    f += weighted_freq(&node, &weights, idx)?;
+                }
+                f
             };
-            let node = query_node(&mut solution, &q)?;
-            let weights = read_node_weights(&mut solution.game, &q)?;
-            let fold_idx = action_index(&node, "Fold")
-                .ok_or_else(|| anyhow!("no Fold action at the bet-facing node"))?;
-            let defence = 1.0 - weighted_freq(&node, &weights, fold_idx)?;
-            let a = assess_mdf(pot_chips, chips, defence, true);
-            print_mdf(&format!("BB vs c-bet Bet({chips:.0})"), &a);
-            total_flags += a.flagged as usize;
+            let cbet = assess_cbet_pot(pot, texture, cbet_freq);
+            print_cbet(cbet_label, &cbet);
+            total_flags += cbet.flagged as usize;
+
+            // ---- Check A: MDF at every flop opening-bet-facing node (paths shared
+            // across pots; defender position is fixed by the node, thresholds by pot) ----
+            // the OOP player facing a bet after checking: [Check, Bet(s)]
+            let after_check_node = query_node(&mut solution, &after_check_query)?;
+            for (_, chips, act) in bet_actions(&after_check_node) {
+                let q = NodeQuery {
+                    path: vec![Step::Action(SolverAction::Check), Step::Action(act)],
+                };
+                let node = query_node(&mut solution, &q)?;
+                let weights = read_node_weights(&mut solution.game, &q)?;
+                let fold_idx = action_index(&node, "Fold")
+                    .ok_or_else(|| anyhow!("no Fold action at the bet-facing node"))?;
+                let defence = 1.0 - weighted_freq(&node, &weights, fold_idx)?;
+                let a = assess_mdf_pot(pot, pot_chips, chips, defence, true);
+                print_mdf(&format!("{checked_bet_def_label} Bet({chips:.0})"), cal.calibrated, &a);
+                total_flags += a.flagged as usize;
+            }
+            // the IP player facing a root bet: [Bet(s)]
+            for (_, chips, act) in bet_actions(&solution.root) {
+                let q = NodeQuery { path: vec![Step::Action(act)] };
+                let node = query_node(&mut solution, &q)?;
+                let weights = read_node_weights(&mut solution.game, &q)?;
+                let fold_idx = action_index(&node, "Fold")
+                    .ok_or_else(|| anyhow!("no Fold action at the lead-facing node"))?;
+                let defence = 1.0 - weighted_freq(&node, &weights, fold_idx)?;
+                let a = assess_mdf_pot(pot, pot_chips, chips, defence, false);
+                print_mdf(&format!("{root_bet_def_label} Bet({chips:.0})"), cal.calibrated, &a);
+                total_flags += a.flagged as usize;
+            }
+            println!();
         }
-        // IP defending the BB lead: path [Bet(s)] from the root
-        for (_, chips, act) in bet_actions(&solution.root) {
-            let q = NodeQuery { path: vec![Step::Action(act)] };
-            let node = query_node(&mut solution, &q)?;
-            let weights = read_node_weights(&mut solution.game, &q)?;
-            let fold_idx = action_index(&node, "Fold")
-                .ok_or_else(|| anyhow!("no Fold action at the lead-facing node"))?;
-            let defence = 1.0 - weighted_freq(&node, &weights, fold_idx)?;
-            let a = assess_mdf(pot_chips, chips, defence, false);
-            print_mdf(&format!("IP vs BB lead Bet({chips:.0})"), &a);
-            total_flags += a.flagged as usize;
-        }
-        println!();
     }
 
     // ---- synthetic demo: prove the flags render while the report stays advisory ----
     println!("--- SYNTHETIC demo (fabricated numbers, proves flagging works; not real spots) ---");
     let demo_mdf = assess_mdf(100.0, 33.0, 0.50, true);
-    print_mdf("SYNTHETIC 50% defence vs 33% pot bet", &demo_mdf);
+    print_mdf("SYNTHETIC 50% defence vs 33% pot bet", true, &demo_mdf);
     let demo_cbet = assess_cbet("rainbow-broadway", 0.10);
-    print_cbet(&demo_cbet);
+    print_cbet("c-bet", &demo_cbet);
     println!(
         "\n{} flag(s) raised across the stored spots (synthetic demo excluded).\n\
          ADVISORY: this report is informational and ALWAYS exits 0.",

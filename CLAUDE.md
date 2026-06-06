@@ -44,8 +44,11 @@ Seven crates under `crates/`:
   authored values test-pinned; per-hand range-consistency laws are unit-tested).
 - `validate`(`gto-validate`)- internal invariants (six-check `check_invariants` gate: exploitability
   target, root + full-tree strategy normalization, per-action EV consistency, root zero-sum,
-  best-response recheck) + `rs_poker` equity cross-check; example `suit_isomorphism` (on-demand,
-  two fresh solves).
+  best-response recheck) + `rs_poker` equity cross-check (villain-weight-correct, D49) + the
+  per-pot advisory layer (MDF thresholds calibrated measure-then-pin per pot family, D52;
+  `theory_advisory` iterates every configured pot tree); examples `suit_isomorphism`
+  (on-demand, two fresh solves) and `defence_trace` (per-hand mechanistic acceptance tool,
+  optional path-spec arg).
 - `store`   (`gto-store`)   - precompute-and-cache: serialize solved trees + manifest; the shared
   viz contract (`gto_store::viz`); examples `smoke` / `build_matrix` / `export_viz` /
   `validate_matrix` (re-run the full invariant gate over every stored spot).

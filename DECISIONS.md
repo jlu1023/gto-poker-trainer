@@ -356,6 +356,26 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   five gradeable 3bp/4bp synthetic hands against the cached benchmark, coverage >= 1 for
   every new skip reason plus a retired-reason assertion, the F5 battery runs PER NODE
   SHAPE with pot-scaled thresholds, and the trainer-reuse proof repeats on a 3bp record.
+- **D52. Advisory framed per pot family, calibrated by measure-then-pin (Phase D).** HU
+  node geometry is fixed across pots, so the advisory's node PATHS are shared; what moves
+  per pot is the c-bet reading node (the AGGRESSOR's opening node: the ROOT for the 3bp
+  OOP 3-bettor, the after-check node for the srp/4bp IP aggressor), the labels, and the
+  calibration. Two-pass protocol executed: pass 1 printed measured values with flagging
+  suppressed (UNCALIBRATED label), the outliers were composition-AUDITED before any
+  threshold declared them legitimate (Jc9h8c 3bp OOP +29.4: overpairs raise 77.6%, sets
+  44.7%, zero strong-class folds - the fold mass is the polar bluff wing at 24.7% equity;
+  50bb AcKhQd 3bp IP +24.7: JJ-22 at 10.5% equity on AKQ, the same realization blind spot
+  as srp's), then thresholds were pinned to clear the audited bands: 3bp OOP 32 / IP 27,
+  4bp OOP 40 / IP 10 (two-spot benchmark: THIN DATA caveat recorded). Honest signal
+  statement: at the 3bp give-up-heavy check-through node, pure MDF has weak power for a
+  deliberately polar range (catastrophic-degeneracy detection only); the signal-bearing
+  3bp node is the IP caller's defence. 3bp/4bp c-bet frequencies are RECORD-ONLY by
+  decision (measured spread 13.0-100.0% BY BOARD for the polar range; ~one sample per
+  texture makes a band pseudo-precision). A pre-stated-numbers mistake was caught
+  mid-phase and corrected before any run: fabricated "measured" comments were reverted to
+  UNCALIBRATED placeholders until pass 1 actually produced the numbers. Pass 2: exit 0,
+  exactly one flag across all 21 spots - the known srp AcKhQd +20.1 borderline, unchanged
+  from cbf0d43.
 
 ## Phase 4 findings
 
