@@ -9,6 +9,15 @@ edition = "2021"
 license = "AGPL-3.0"
 publish = false
 
+[features]
+# Production builds MUST enable this, or tauri::generate_context! resolves the window to
+# devUrl (http://localhost:5173) instead of embedding frontendDist (../../viz/dist), and
+# the bare exe shows ERR_CONNECTION_REFUSED with no Vite running. tauri-build's build
+# script sets cfg(dev) = !custom-protocol; `cargo build --release` alone does NOT enable
+# it, so the canonical build (desktop/build-desktop.ps1) passes --features custom-protocol.
+# Kept non-default so `tauri dev` (which wants devUrl) still works unchanged.
+custom-protocol = ["tauri/custom-protocol"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

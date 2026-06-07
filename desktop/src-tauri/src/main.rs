@@ -32,6 +32,7 @@
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
@@ -44,6 +45,15 @@ use tauri::{Manager, RunEvent};
 const BAKED_DEFAULT_ROOT: &str = r"C:\Users\james\Projects\gto-poker-bot";
 
 const HEALTH_ADDR: &str = "127.0.0.1:7474";
+
+/// The Vite dev server addr. A dev-mode binary (custom-protocol feature OFF) makes the
+/// webview navigate here (devUrl); that is correct only under `tauri dev`, where Vite is
+/// already up. See `dev_server_up` and the dev-mode guard in `main`.
+const DEV_SERVER_ADDR: &str = "127.0.0.1:5173";
+
+/// CREATE_NO_WINDOW: gto-server is a console-subsystem exe; without this flag a GUI parent
+/// (this app, double-clicked) spawns it WITH a console window, which violates "no terminals".
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 struct ServerChild(Mutex<Option<Child>>);
 
@@ -80,6 +90,15 @@ fn probe_port() -> PortState {
     }
 }
 
+/// True if something is listening on the Vite dev addr (a live `tauri dev` session).
+fn dev_server_up() -> bool {
+    TcpStream::connect_timeout(
+        &DEV_SERVER_ADDR.parse().expect("static addr parses"),
+        Duration::from_millis(500),
+    )
+    .is_ok()
+}
+
 fn repo_root() -> PathBuf {
     std::env::var("GTO_LAB_ROOT")
         .map(PathBuf::from)
@@ -105,13 +124,36 @@ fn die(title: &str, message: &str) -> ! {
             text.as_ptr(),
             caption.as_ptr(),
             windows_sys::Win32::UI::WindowsAndMessaging::MB_OK
-                | windows_sys::Win32::UI::WindowsAndMessaging::MB_ICONERROR,
+                | windows_sys::Win32::UI::WindowsAndMessaging::MB_ICONERROR
+                // raise above the maximised app window if one already exists, so a
+                // post-window failure dialog can never hide behind it
+                | windows_sys::Win32::UI::WindowsAndMessaging::MB_TOPMOST
+                | windows_sys::Win32::UI::WindowsAndMessaging::MB_SETFOREGROUND,
         );
     }
     std::process::exit(2);
 }
 
 fn main() {
+    // ---- dev-mode guard: the webview-source failure class, made loud ----
+    // The custom-protocol feature gates whether generate_context! embeds frontendDist
+    // (../../viz/dist) or points the webview at devUrl (http://localhost:5173). With the
+    // feature OFF this binary is dev-mode: the viz only loads when Vite is up. That is
+    // correct under `tauri dev` (beforeDevCommand starts Vite, so dev_server_up() is true),
+    // but a bare double-click of a dev-mode release exe has no Vite, so the webview would
+    // render ERR_CONNECTION_REFUSED. Fail loudly naming the build mistake instead.
+    if !cfg!(feature = "custom-protocol") && !dev_server_up() {
+        die(
+            "GTO Lab: this is a dev-mode build (the viz cannot load)",
+            "This binary was built WITHOUT the custom-protocol feature, so its webview \
+             points at the Vite dev server (http://localhost:5173) instead of the bundled \
+             viz, and nothing is serving 5173.\r\n\r\nBuild the real artefact with:\r\n  \
+             desktop\\build-desktop.ps1\r\n\r\n(plain `cargo build --release` in \
+             desktop/src-tauri produces this dev-mode binary - use the script, which passes \
+             --features custom-protocol).",
+        );
+    }
+
     // ---- pre-flight: port state, root resolution, matrix guard (all before the UI) ----
     let port = probe_port();
     if port == PortState::BoundNotHealthy {
@@ -176,6 +218,7 @@ fn main() {
 
                 let child = Command::new(&server_exe)
                     .current_dir(&root)
+                    .creation_flags(CREATE_NO_WINDOW)
                     .stdout(Stdio::null())
                     .stderr(Stdio::piped())
                     .spawn()
