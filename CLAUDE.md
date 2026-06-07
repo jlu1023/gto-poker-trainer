@@ -3,7 +3,7 @@
 Build conventions and constraints for this repo. Read alongside PLAN.md and DECISIONS.md.
 
 ## Source of truth
-The master plan at `C:\Users\james\OneDrive\Second Brain\Projects\GTO Poker Bot\GTO Poker Bot.md`
+The master plan at `C:\Users\james\Second Brain\Projects\GTO Poker Bot\GTO Poker Bot.md`
 is authoritative for goal, solved-state landscape, method, stack, and architecture. Durable findings
 and decisions are mirrored in the Obsidian vault folder next to it (for example
 `Phase 0 - findings.md`). This repo holds PLAN.md, DECISIONS.md, and CLAUDE.md; the vault holds the
