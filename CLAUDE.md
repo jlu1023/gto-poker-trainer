@@ -136,3 +136,6 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
 ## Writing conventions
 - No em dashes in any prose. Use hyphens, colons, or parentheses.
 - Configuration is read from `gto-config`, never hardcoded in the engine.
+
+## Backup (automatic)
+At the end of every Claude Code session, and after completing any phase, run: git add -A; git commit -m "<short summary> (yyyy-MM-dd-HHmm)"; git push. Skip cleanly if nothing changed. Never commit secrets or the matrix/ solve cache (see .gitignore). Never force-push or rewrite history. Remote: private GitHub repo jlu1023/gto-poker-bot (since 2026-06-07). Notes live in the vault (Second Brain\Projects\GTO Poker Bot), backed by the second-brain repo.
