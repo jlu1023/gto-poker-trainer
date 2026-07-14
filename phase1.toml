@@ -3,8 +3,9 @@
 # everything else falls back to Config::default() via serde(default).
 
 [solve]
-# Tighter than the smoke default is unnecessary here; keep 0.5% of pot for batch speed.
-target_exploit_pct_pot = 0.005
+# Convergence target: 0.05% of pot, the intended sub-0.1% standard. 0.5% was a drift that
+# measurably over-stated per-hand betting frequencies (the trainer grades against these).
+target_exploit_pct_pot = 0.0005
 max_iterations = 1000
 print_progress = false
 

@@ -221,7 +221,9 @@ mod tests {
     }
 
     fn bands() -> TrainerConfig {
-        TrainerConfig::default() // eps 0.5% pot, minor max 2% pot, mix floor 10%
+        // Pin the test bands explicitly so these scenarios exercise the band LOGIC at a known
+        // eps, decoupled from the production default (now the tight 0.05% solve target).
+        TrainerConfig { correct_eps_pct_pot: 0.005, minor_leak_max_pct_pot: 0.02, mix_freq_floor: 0.10 }
     }
 
     const POT: f32 = 100.0;

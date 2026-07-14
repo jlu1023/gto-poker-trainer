@@ -238,10 +238,10 @@ def step_e2e(fresh_board, fresh_3bp):
             if stats is None:
                 print("  FAIL  no stored summary for the solved key (not cached to matrix?)")
                 return False
-            if stats["exploit"] <= 0.005 + 1e-6:
-                print(f"  PASS  stored exploitability {stats['exploit']*100:.3f}% pot <= 0.5% target")
+            if stats["exploit"] <= 0.0005 + 1e-6:
+                print(f"  PASS  stored exploitability {stats['exploit']*100:.4f}% pot <= 0.05% target")
             else:
-                print(f"  FAIL  stored exploitability {stats['exploit']*100:.3f}% pot above target")
+                print(f"  FAIL  stored exploitability {stats['exploit']*100:.4f}% pot above target")
                 ok = False
 
             # ---- 3b. UI readout reconciles with the STORED solution (AA cell) ----

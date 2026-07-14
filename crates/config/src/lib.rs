@@ -60,7 +60,8 @@ pub struct SolveConfig {
     /// Chip resolution: how many integer chips represent one big blind. Chosen so every
     /// configured bet size lands on an integer (default 20 == a 10/20 game).
     pub chip_per_bb: u32,
-    /// Convergence target, expressed as a fraction of the starting pot (0.005 == 0.5% of pot).
+    /// Convergence target, expressed as a fraction of the starting pot (0.0005 == 0.05% of pot,
+    /// the intended sub-0.1% standard).
     pub target_exploit_pct_pot: f64,
     /// Hard cap on solve iterations.
     pub max_iterations: u32,
@@ -174,7 +175,7 @@ pub struct ReviewConfig {
     /// D45: a played-at-mix-floor action may not exceed the mix EV by more than this fraction
     /// of pot (F5 regression tripwire through read_node). Calibration: audit-measured
     /// legitimate played-gaps reach ~1.4% pot on converged solves; F5-class violations are
-    /// 30%+ of pot; 2% separates them cleanly (the literal solve target of 0.5% would
+    /// 30%+ of pot; 2% separates them cleanly (the literal solve target of 0.05% would
     /// false-fire on audited-good data).
     pub ev_sanity_eps_pct_pot: f64,
     /// Hero's own bet maps to a tree size only within this fraction of pot (else skipped
@@ -238,7 +239,7 @@ impl Default for Config {
 impl Default for TrainerConfig {
     fn default() -> Self {
         Self {
-            correct_eps_pct_pot: 0.005,
+            correct_eps_pct_pot: 0.0005,
             minor_leak_max_pct_pot: 0.02,
             mix_freq_floor: 0.10,
         }
@@ -249,7 +250,7 @@ impl Default for SolveConfig {
     fn default() -> Self {
         Self {
             chip_per_bb: 20,
-            target_exploit_pct_pot: 0.005,
+            target_exploit_pct_pot: 0.0005,
             max_iterations: 1000,
             print_progress: true,
             bet_tree: BetTreeConfig::default(),

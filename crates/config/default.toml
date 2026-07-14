@@ -5,9 +5,9 @@
 [solve]
 # Chip resolution: integer chips per big blind. Chosen so bet sizes stay integer (10/20 game).
 chip_per_bb = 20
-# Convergence target as a fraction of the starting pot (0.005 = 0.5% of pot for smoke speed;
-# tighten toward 0.003 for production solves).
-target_exploit_pct_pot = 0.005
+# Convergence target as a fraction of the starting pot (0.0005 = 0.05% of pot, the intended
+# sub-0.1% standard). A looser target measurably over-states per-hand betting frequencies.
+target_exploit_pct_pot = 0.0005
 # Hard cap on solve iterations.
 max_iterations = 1000
 print_progress = true
@@ -54,7 +54,7 @@ zstd_level = 19
 # Precedence: Correct (loss <= eps) > FineMix (freq >= floor AND loss <= minor max)
 # > MinorLeak (loss <= minor max) > ClearLeak.
 # correct_eps equals the solve convergence target: verdicts are honest to solve precision.
-correct_eps_pct_pot = 0.005
+correct_eps_pct_pot = 0.0005
 minor_leak_max_pct_pot = 0.02
 mix_freq_floor = 0.10
 
@@ -64,7 +64,7 @@ max_fresh_solves_per_run = 25
 min_sample_n = 10
 z_threshold = 2.0
 # D45 F5-tripwire: played-action EV may not beat the mix EV by more than this fraction of pot.
-# 2% (not the 0.5% solve target): audit-measured legitimate gaps reach ~1.4% pot; F5-class
+# 2% (not the 0.05% solve target): audit-measured legitimate gaps reach ~1.4% pot; F5-class
 # violations are 30%+; 2% separates them without false-firing on good data.
 ev_sanity_eps_pct_pot = 0.02
 # Hero bet sizes map to a tree size only within this fraction of pot; else skipped.

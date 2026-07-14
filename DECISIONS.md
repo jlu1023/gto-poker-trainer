@@ -402,6 +402,37 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   clause) attach; code-signing / installers / distribution / auto-update are explicitly
   deferred and would re-open this boundary.
 
+## Convergence-target correction (2026-07-14)
+
+- **D54. The solve convergence target was corrected to the intended sub-0.1% standard
+  (0.05% of pot); the prior 0.5% was a smoke-speed default retained past its purpose, not a
+  deliberate production target.** `target_exploit_pct_pot` was carrying 0.005 (0.5% of pot)
+  across the Rust defaults (`SolveConfig` / `TrainerConfig` in config/src/lib.rs), the config
+  schema (`crates/config/default.toml`), and the batch config (`phase1.toml`). Origin is
+  traceable: the Phase 0 commit that introduced it (bb8f4c7) comments the value "0.5% of pot
+  for smoke speed", and the master plan records "<0.1% exploitability" as the practical target,
+  so this is a value chosen for smoke that was never tightened to the standard the stored
+  benchmark was meant to hold - the plan calls it "likely a drift below the recorded sub-0.1%
+  intent, hidden by a same-constant gate". `correct_eps_pct_pot` (the grader's honesty epsilon,
+  defined to equal the solve precision) had drifted with it. Both are corrected to 0.0005
+  (0.05% of pot). This corrects a stale value to the intended standard; it is not a tightening
+  of a deliberate target. Why it matters: the trainer grades committed actions against the
+  stored root strategy, so a loose solve measurably over-states per-hand betting frequencies.
+  Measured on `100bb_Ks7h2c_flop_srp-v2` (dry rainbow, BB out of position): at the corrected
+  target KK bets 1.64% and AA 2.20% on average (overwhelmingly checking the nuts to trap),
+  against the ~19% / ~21% the 0.5% solve produced. The `ev_sanity_eps_pct_pot` F5 tripwire
+  deliberately stays at 0.02 (2% of pot): audited legitimate mix-EV gaps reach ~1.4% pot and
+  F5-class violations are 30%+, so it must not track the solve target. The whole curated
+  benchmark (19 spots across srp-v2 / 3bp-v1 / 4bp-v1 at 50 and 100bb) plus the smoke spot was
+  re-solved to <= 0.05% and every gate passed: validate_matrix over all stored spots (20/20),
+  verify_solve.py (a fresh on-demand solve converges to <= 0.05%), cargo test --workspace, and
+  verify_desktop.py (the packaged app resolves the matrix and paints a cached board). The grade
+  unit tests pin their bands to the old 0.005 eps explicitly so they keep exercising the band
+  logic at a known epsilon, decoupled from the now-tight production default. Context: the repo
+  had been moved to a sibling folder and back to `C:\Users\james\Projects\gto-poker-bot` (the
+  app's baked default root), so the desktop launch resolves with GTO_LAB_ROOT unset; no code
+  path changed for that, noted only because it surfaced with this re-solve.
+
 ## Phase 4 findings
 
 - **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,
