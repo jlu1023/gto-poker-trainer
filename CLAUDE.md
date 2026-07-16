@@ -114,7 +114,20 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   trees from `phase1.toml` via `tree_for`). Endpoints: `/api/health`, `/api/solve` (SSE;
   depth + pot_type in the body, both defaulted for back-compat), `/api/setup` (trainer
   pre-commit: legal actions + hand-in-range, no strategy data), `/api/grade` (verdict
-  for a committed action; bands from `[trainer]` config).
+  for a committed action; bands from `[trainer]` config), `/api/node` (navigator; below).
+- Navigator (explore mode, D55): walk an already-cached solve down the action tree. `/api/node`
+  NEVER solves (409 on an uncached spot). TWO gates, deliberately distinct: the HARD F5 gate
+  (dot identity + per-action EV present) 500s at any displayed node, while the SOFT display gate
+  (reach-gate) only decides descendability. A decision child is descendable when its OWN worst
+  unplayed-action dominance is <= `[navigator] display_gate_pct_pot` (5% of pot). Solve quality
+  is GLOBAL, not local: a low-reach subtree is barely trained even at root exploitability
+  <= 0.05% of pot, so dominance there is large and does NOT shrink with tighter global
+  convergence - never use it as a hard F5 gate off-root (`ev_dot_consistency` is the
+  offset-invariant one that is valid anywhere). The same dominance ships per node as the
+  CONFIDENCE signal, and that indicator is LOAD-BEARING: 5% (over a purist 1%) is only honest
+  because a marginal node cannot look as authoritative as a root-quality one. If the indicator
+  ever stops working, set `display_gate_pct_pot = 1.0` - never ship 5% unmarked. Gate + tiers
+  ship in the contract (`GateContract`) so the UI never duplicates the thresholds.
 - Trainer (Phase 4): the viz "train" mode. Commit-then-reveal is enforced by data absence: the
   client fetches nothing solver-derived until the action is committed. Grading is engine-side
   (`gto_engine::grade`, pure + unit-tested); per-action EV comes from `expected_values_detail`
@@ -129,7 +142,11 @@ AGPL-3.0 imposes no obligation for personal offline use; a hosted or shipped viz
   out-of-envelope decisions skip with precise reasons; never approximate or action-translate.
 - Gates: `verify_viz.py` (Phase 2), `verify_solve.py` (Phase 3), `verify_trainer.py` (Phase 4),
   `verify_review.py` (Phase 5), `verify_desktop.py` (packaging: sidecar lifecycle,
-  matrix resolution, maximised window, no-survivor teardown), all run with the Python 3.12
+  matrix resolution, maximised window, no-survivor teardown), `verify_navigator.py` (D55:
+  reads reconcile cell-wise to the `node_grid` oracle, the reach-gate excludes what the measured
+  tables say it must, and the confidence indicator provably separates a marginal node from a
+  root-quality one - it reuses verify_desktop's launch/CDP helpers and the `node_grid` example
+  as its read-only oracle), all run with the Python 3.12
   interpreter that has Playwright
   (`C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe`). Every board a gate
   reserves lives in `verifier_boards.py` (partitioned registry: expected-cached,

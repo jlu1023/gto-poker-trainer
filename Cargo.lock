@@ -378,6 +378,7 @@ dependencies = [
  "gto-preflop",
  "gto-store",
  "rs_poker",
+ "serde_json",
 ]
 
 [[package]]

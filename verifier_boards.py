@@ -75,6 +75,14 @@ TRAINER_CACHED_100 = "Ks7h2c"
 TRAINER_CACHED_3BP = "9c5d3h"    # verify_trainer 3bp round (cached under the 3bp-v1 key)
 REVIEW_CACHED_100 = ["Ks7h2c", "9c5d3h", "Jc9h8c"]
 REVIEW_CACHED_50 = ["AcKhQd", "Qs8s5h", "8d6s3c"]
+# verify_navigator (D55): one board per texture, chosen because the reach-gate treats them
+# DIFFERENTLY, so the gate pins the real shape and not just "some node was excluded". The
+# navigator never solves, so these are read-only cached fixtures and consume nothing.
+NAV_DRY_100 = "Ks7h2c"       # shallow bet tail ADMITTED (2.0% / 4.3% / 4.7% of pot) - what
+                             # the 5%-over-1% trade buys; also holds the ~931% [0,2,2,2] node
+NAV_WET_100 = "Jc9h8c"       # whole root layer admitted (0.005% / 0.10% / 1.67%)
+NAV_MONOTONE_100 = "Kh9h4h"  # bet tail excluded (Bet(33) ~6.8% of pot)
+NAV_BROADWAY_50 = "AcKhQd"   # bet tail excluded (Bet(75) ~167% of pot, the IP-facing-bet node)
 
 _PARTITIONS = {
     "expected-cached": EXPECTED_CACHED,
@@ -113,7 +121,8 @@ def check_partitions() -> None:
                 f"board(s) {sorted(overlap)} are in BOTH '{a}' and '{b}': "
                 f"one board, one role - fix verifier_boards.py")
     for fixture in [SOLVE_CACHE_INTEROP, TRAINER_CACHED_50, TRAINER_CACHED_100,
-                    TRAINER_CACHED_3BP, *REVIEW_CACHED_100, *REVIEW_CACHED_50]:
+                    TRAINER_CACHED_3BP, *REVIEW_CACHED_100, *REVIEW_CACHED_50,
+                    NAV_DRY_100, NAV_WET_100, NAV_MONOTONE_100, NAV_BROADWAY_50]:
         assert fixture in EXPECTED_CACHED, (
             f"named cached fixture '{fixture}' is not in EXPECTED_CACHED")
 

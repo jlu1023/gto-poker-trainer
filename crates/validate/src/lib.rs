@@ -25,8 +25,8 @@ pub mod advisory;
 use anyhow::{anyhow, bail, Result};
 use gto_config::Config;
 use gto_engine::{
-    card_from_str, compute_exploitability, NodeStrategy, PostFlopGame, SolverAction,
-    SolverRange, Spot, SpotSolution,
+    card_from_str, compute_exploitability, read_positioned_node, NodeStrategy, PostFlopGame,
+    SolverAction, SolverRange, Spot, SpotSolution,
 };
 use rs_poker::core::{Card, Hand, Rankable, Suit, Value};
 
@@ -192,9 +192,37 @@ pub fn ev_consistency(node: &NodeStrategy, pot_chips: f32) -> (bool, Vec<String>
     let mut notes = Vec::new();
     let dot_tol = 0.05_f32; // chips
     let dominance_tol = 0.01_f32 * pot_chips; // 1% of pot, in chips
+    let (max_dot_err, max_dominance) = ev_quantities(node);
 
-    let mut max_dot_err = 0.0_f32;
-    let mut max_dominance = 0.0_f32;
+    let mut ok = true;
+    if max_dot_err > dot_tol {
+        ok = false;
+        notes.push(format!(
+            "ev != strategy . ev_per_action (max error {max_dot_err:.3} chips > {dot_tol})"
+        ));
+    }
+    if max_dominance > dominance_tol {
+        ok = false;
+        notes.push(format!(
+            "an unplayed action dominates the played mix by {max_dominance:.3} chips \
+             (> {dominance_tol:.2}); F5-class reference error suspected"
+        ));
+    }
+    (ok, notes)
+}
+
+/// The two per-action-EV quantities at a node, over hands with strategy mass: the worst
+/// dot-identity error `|ev[h] - sum_a strategy . ev_per_action|` and the worst unplayed-action
+/// dominance `best_overall_EV - best_PLAYED_EV`, both in chips. `(0, 0)` when the node carries
+/// no per-action EV. The single place both are computed, so the hard F5 check and the
+/// display-gate signal cannot drift apart.
+fn ev_quantities(node: &NodeStrategy) -> (f32, f32) {
+    let n = node.hands.len();
+    let num_actions = node.actions.len();
+    if node.ev_per_action.len() != n * num_actions || n == 0 || num_actions == 0 {
+        return (0.0, 0.0);
+    }
+    let (mut max_dot_err, mut max_dominance) = (0.0f32, 0.0f32);
     for h in 0..n {
         // skip hands the player never holds here (zero strategy mass)
         let mass: f32 = (0..num_actions).map(|a| node.strategy[h + a * n]).sum();
@@ -218,22 +246,38 @@ pub fn ev_consistency(node: &NodeStrategy, pot_chips: f32) -> (bool, Vec<String>
             max_dominance = max_dominance.max(best_overall - best_played);
         }
     }
+    (max_dot_err, max_dominance)
+}
 
-    let mut ok = true;
+/// The DOT-IDENTITY F5 check alone (reference-correctness): `ev[h] == sum_a strategy .
+/// ev_per_action`. Offset-invariant and convergence-INDEPENDENT (both sides carry the node's
+/// one shared money-reference offset, which cancels), so it is a valid HARD gate at ANY node -
+/// unlike the dominance check, which reflects LOCAL convergence and is not (D55). The navigator
+/// uses this as its hard per-node F5 gate. Passes trivially when the node has no per-action EV.
+pub fn ev_dot_consistency(node: &NodeStrategy) -> (bool, Vec<String>) {
+    let (max_dot_err, _) = ev_quantities(node);
+    let dot_tol = 0.05_f32; // chips
     if max_dot_err > dot_tol {
-        ok = false;
-        notes.push(format!(
-            "ev != strategy . ev_per_action (max error {max_dot_err:.3} chips > {dot_tol})"
-        ));
+        (
+            false,
+            vec![format!(
+                "ev != strategy . ev_per_action (max error {max_dot_err:.3} chips > {dot_tol})"
+            )],
+        )
+    } else {
+        (true, Vec::new())
     }
-    if max_dominance > dominance_tol {
-        ok = false;
-        notes.push(format!(
-            "an unplayed action dominates the played mix by {max_dominance:.3} chips \
-             (> {dominance_tol:.2}); F5-class reference error suspected"
-        ));
-    }
-    (ok, notes)
+}
+
+/// The worst unplayed-action dominance at a node (chips): `best_overall_EV - best_PLAYED_EV`
+/// over hands with strategy mass. A LOCAL SOLVE-QUALITY signal (how far the stored strategy is
+/// from playing the best action here), NOT a reference-correctness check: it reflects local
+/// (not global) convergence, is large at low-reach nodes a global-exploitability solve does not
+/// train, and does not shrink with tighter global convergence (D55). It is the basis of the
+/// navigator's display gate and per-node confidence - never a hard F5 gate at non-root nodes.
+/// `0` when the node carries no per-action EV.
+pub fn node_dominance(node: &NodeStrategy) -> f32 {
+    ev_quantities(node).1
 }
 
 /// For every hand at a node, verify the action probabilities are FINITE and sum to ~1.
@@ -423,6 +467,108 @@ pub fn tree_strategy_normalized(game: &mut PostFlopGame, node_budget: usize) -> 
             stack.push(h);
         }
     }
+    game.back_to_root();
+    report
+}
+
+/// The F5 result over a spot's flop decision layer (freshly checked; no shape exempted).
+#[derive(Debug, Default, Clone)]
+pub struct FlopNodeReport {
+    pub ok: bool,
+    pub decision_nodes: usize,
+    pub chance_nodes_stopped: usize,
+    pub terminal_nodes: usize,
+    pub empty_epa_nodes: usize,
+    /// Worst unplayed-action dominance across the flop layer (chips). REPORTED, not gated on:
+    /// dominance is a local-convergence / display-gate signal, not a hard F5 failure (D55).
+    pub max_dominance_chips: f32,
+    pub truncated: bool,
+    pub notes: Vec<String>,
+}
+
+/// The F5 battery behind the game-tree navigator. Walks EVERY flop DECISION node reachable by
+/// action steps (a chance node STOPS the walk - the flop-only boundary; the turn is out of
+/// scope) and at each reads the node with F5-correct per-action EV (`read_positioned_node`),
+/// then asserts `strategy_normalized`, `ev_consistency`, and per-action EV present. No shape is
+/// exempted: the root and IP-after-check are re-checked here, because a read that is correct in
+/// the solve contract or the review path is only an assumption at the surface the navigator
+/// renders until asserted at that surface. `pot_chips` is the starting pot in chips (as
+/// `check_invariants` derives it). One pass over one cached/solved spot covers its whole flop
+/// layer, deeper re-raise/all-in nodes included.
+pub fn flop_node_ev_consistency(game: &mut PostFlopGame, node_budget: usize) -> FlopNodeReport {
+    let mut report = FlopNodeReport {
+        ok: true,
+        ..Default::default()
+    };
+    let mut stack: Vec<Vec<usize>> = vec![Vec::new()];
+    let mut visited = 0usize;
+
+    while let Some(history) = stack.pop() {
+        visited += 1;
+        if visited > node_budget {
+            report.truncated = true;
+            report.ok = false;
+            report
+                .notes
+                .push(format!("node budget {node_budget} exhausted; walk truncated"));
+            break;
+        }
+        game.apply_history(&history);
+
+        if game.is_terminal_node() {
+            report.terminal_nodes += 1;
+            continue;
+        }
+        if game.is_chance_node() {
+            // flop-only: the turn card stops the walk; do NOT recurse past it
+            report.chance_nodes_stopped += 1;
+            continue;
+        }
+
+        report.decision_nodes += 1;
+        let node = match read_positioned_node(game) {
+            Ok(n) => n,
+            Err(e) => {
+                report.ok = false;
+                report.notes.push(format!("node {history:?}: read failed: {e}"));
+                continue;
+            }
+        };
+        if node.ev_per_action.is_empty() {
+            report.empty_epa_nodes += 1;
+            report.ok = false;
+            report.notes.push(format!(
+                "node {history:?}: per-action EV absent at a decision node (would render without F5 data)"
+            ));
+        }
+        let (sn_ok, sn_err) = strategy_normalized(&node);
+        if !sn_ok {
+            report.ok = false;
+            report
+                .notes
+                .push(format!("node {history:?}: strategy not normalized (err {sn_err:.2e})"));
+        }
+        // HARD F5 gate: the dot identity (reference-correctness), valid at every node.
+        // Dominance is a LOCAL-convergence signal - reported below, NOT gated on (D55).
+        let (dot_ok, dot_notes) = ev_dot_consistency(&node);
+        if !dot_ok {
+            report.ok = false;
+            for note in dot_notes {
+                report.notes.push(format!("node {history:?}: {note}"));
+            }
+        }
+        report.max_dominance_chips = report.max_dominance_chips.max(node_dominance(&node));
+
+        // recurse into ACTION children (a child that is a chance/terminal node is caught by the
+        // stop conditions above on its own visit)
+        let num_actions = game.available_actions().len();
+        for idx in 0..num_actions {
+            let mut h = history.clone();
+            h.push(idx);
+            stack.push(h);
+        }
+    }
+
     game.back_to_root();
     report
 }
@@ -670,6 +816,106 @@ mod tests {
             equity: vec![0.8, 0.7],
             ev_per_action: Vec::new(),
         }
+    }
+
+    /// Parse a bet/raise/all-in label ("Bet(33)" / "Raise(99)" / "AllIn(240)") to its chip
+    /// amount; non-sizing actions (Check/Call/Fold) yield 0.
+    fn action_amount(label: &str) -> f32 {
+        for pre in ["Bet(", "Raise(", "AllIn("] {
+            if let Some(rest) = label.strip_prefix(pre) {
+                if let Some(num) = rest.strip_suffix(')') {
+                    return num.parse::<f32>().unwrap_or(0.0);
+                }
+            }
+        }
+        0.0
+    }
+
+    /// The navigator F5 battery, end to end and self-contained (no matrix): a small spot solves
+    /// fast, EVERY flop decision node passes the battery (no exemptions, amendment 1), and - the
+    /// load-bearing part (amendment 2) - the battery's `ev_consistency` check has TEETH: the
+    /// original F5 bug shape (per-action EV taken by descending into each child, so each action's
+    /// money reference shifts by its own bet amount) MUST fail it at a non-root node. A check
+    /// that cannot fail proves nothing.
+    #[test]
+    fn flop_navigator_f5_battery_has_teeth() {
+        use gto_engine::{read_node_labeled, solve_spot, Board, RakeSpec, Spot, Street};
+
+        // small ranges + shallow stack => a real near-equilibrium that solves in a moment
+        let spot = Spot {
+            stack_depth_bb: 100,
+            initial_street: Street::Flop,
+            board: Board {
+                flop: ["Ks".into(), "7h".into(), "2c".into()],
+                turn: None,
+                river: None,
+            },
+            pot_bb: 5.0,
+            effective_stack_bb: 97.5,
+            oop_range: "QQ+,AKs,A5s".into(),
+            ip_range: "QQ+,AKs,AQs".into(),
+            rake: RakeSpec::default(),
+        };
+        // The default (smoke-v0) tree - Check / Bet(33), no raises - is a small, shallow flop
+        // tree that converges in a couple hundred iterations on a dry board, so every flop node
+        // is a real near-equilibrium the battery can hold to the 1%-of-pot dominance tolerance.
+        // The srp-v2 raise / check-raise shapes are battery-covered on the real cached matrix by
+        // the node_grid oracle and verify_navigator.py (no shape is exempted, only relocated to
+        // where a well-solved instance of it exists).
+        let mut cfg = Config::default();
+        cfg.solve.target_exploit_pct_pot = 0.0005;
+        cfg.solve.max_iterations = 1000;
+
+        let mut solution = solve_spot(&spot, &cfg.solve).expect("small spot solves");
+
+        // POSITIVE: every flop decision node passes (root and IP-after-check included).
+        let report = flop_node_ev_consistency(&mut solution.game, 100_000);
+        assert!(
+            report.ok && !report.truncated,
+            "flop F5 battery failed: {} decision nodes, notes={:?}",
+            report.decision_nodes,
+            report.notes
+        );
+        assert!(
+            report.decision_nodes >= 3,
+            "expected several flop decision nodes, got {}",
+            report.decision_nodes
+        );
+
+        // the correct read of a NON-ROOT node (IP facing a check) is F5-consistent
+        let good =
+            read_node_labeled(&mut solution.game, &["Check".to_string()]).expect("read [Check]");
+        assert_eq!(good.player, 1, "[Check] is IP's node");
+        assert!(
+            ev_dot_consistency(&good).0,
+            "the correct non-root read must pass the dot-identity F5 check"
+        );
+
+        // NEGATIVE: reproduce the child-navigation F5 signature at this non-root node and prove
+        // ev_consistency catches it.
+        let n = good.hands.len();
+        let na = good.actions.len();
+        let mut buggy = good.clone();
+        let mut any_shift = false;
+        for a in 0..na {
+            let shift = action_amount(&good.actions[a]);
+            if shift == 0.0 {
+                continue;
+            }
+            any_shift = true;
+            for h in 0..n {
+                buggy.ev_per_action[h + a * n] += shift;
+            }
+        }
+        assert!(any_shift, "the test node must offer a bet/raise action to shift");
+        // the child-navigation shift breaks the DOT IDENTITY (ev[h] unchanged, ev_per_action
+        // shifted), which is the HARD F5 gate the navigator relies on at every displayed node
+        let (buggy_ok, buggy_notes) = ev_dot_consistency(&buggy);
+        assert!(
+            !buggy_ok,
+            "child-navigated (offset-shifted) F5 read at a non-root node MUST fail the \
+             dot-identity check; it passed, so the hard F5 gate lacks teeth. notes={buggy_notes:?}"
+        );
     }
 
     /// The weighted-villain law, hand-verified at the data layer: enumerating vs

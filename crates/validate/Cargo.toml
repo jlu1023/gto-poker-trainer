@@ -19,3 +19,5 @@ gto-preflop.workspace = true
 # (store's and history's gto-validate edges are dev-only, so no dependency cycle)
 gto-store.workspace = true
 gto-history.workspace = true
+# the node_grid oracle example emits per-class JSON for the navigator acceptance gate
+serde_json.workspace = true

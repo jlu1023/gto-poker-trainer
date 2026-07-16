@@ -64,6 +64,38 @@ export interface SolveComplete {
   spot: SpotContract;
 }
 
+// ---- Game-tree navigator (POST /api/node, D55) ----
+
+/// What lies down one action from the current node, and whether the navigator may go there.
+export interface ActionMeta {
+  label: string;
+  /** "decision" (a further player node) | "chance" (the turn) | "terminal" (hand ends). */
+  child: "decision" | "chance" | "terminal";
+  /** A decision child's own dominance as % of the starting pot. Null for chance/terminal. */
+  child_dominance_pct: number | null;
+  /** True only for a decision child inside the reach-gate. False = a self-explaining boundary. */
+  descendable: boolean;
+}
+
+/// The reach-gate + confidence tiers, as % of the starting pot. Shipped by the server from
+/// `[navigator]` config so the UI never duplicates the thresholds (they would drift).
+export interface GateContract {
+  display_gate_pct_pot: number;
+  confidence_high_pct_pot: number;
+  confidence_fair_pct_pot: number;
+}
+
+/// POST /api/node response: a superset of SpotContract, so the grid / legend / detail / table
+/// render a node exactly as they render the root.
+export interface NodeContract extends SpotContract {
+  actions_meta: ActionMeta[];
+  /** Action labels walked from the root. Empty = the root itself. */
+  path: string[];
+  /** This node's OWN worst unplayed-action dominance, % of pot: the confidence signal. */
+  dominance_pct: number;
+  gate: GateContract;
+}
+
 // ---- Phase 4 trainer ----
 
 /// GET /api/setup response: pre-commit data ONLY (labels and booleans, no strategy).

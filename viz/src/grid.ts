@@ -10,6 +10,16 @@ const RANK_INDEX: Record<string, number> = Object.fromEntries(RANKS.map((r, i) =
 // action hue palette, applied by action index (Check, Bet33, Bet75, ...)
 const ACTION_PALETTE = ["#5b8def", "#46b27a", "#e0a33e", "#d2553f", "#9b5de5", "#3fb0b0"];
 
+/** Solver action label -> operator-facing text ("Bet(33)" -> "Bet 33", "AllIn(200)" -> "All-in").
+ *  Shared by the legend, the detail bars and the navigator rail so one action reads the same
+ *  everywhere on stage. */
+export function humanAction(label: string): string {
+  const m = label.match(/^([A-Za-z]+)\((\d+)\)$/);
+  if (!m) return label;
+  if (m[1] === "AllIn") return "All-in";
+  return `${m[1]} ${m[2]}`;
+}
+
 export function actionColors(actions: string[]): string[] {
   return actions.map((label, i) => {
     if (/^fold/i.test(label)) return "#6b7280";

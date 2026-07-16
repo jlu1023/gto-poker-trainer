@@ -252,6 +252,17 @@ pub fn read_root(game: &mut PostFlopGame) -> Result<NodeStrategy> {
 pub fn read_node(game: &mut PostFlopGame, query: &NodeQuery) -> Result<NodeStrategy> {
     game.back_to_root();
     walk_path(game, &query.path)?;
+    let node = read_here_with_epa(game)?;
+    game.back_to_root();
+    Ok(node)
+}
+
+/// Read the node the game is CURRENTLY positioned on, filling per-action EV F5-correctly
+/// (`expected_values_detail` at THIS node; see `read_node`). Does NOT return to root - the
+/// caller owns positioning. Every node read (root, `Step` path, label path) funnels through
+/// here so the EPA fill is identical everywhere: on a shape mismatch it leaves EPA absent
+/// rather than emitting a wrong-reference value.
+fn read_here_with_epa(game: &mut PostFlopGame) -> Result<NodeStrategy> {
     let mut node = read_current_node(game)?;
     let n = node.hands.len();
     let num_actions = node.actions.len();
@@ -263,8 +274,16 @@ pub fn read_node(game: &mut PostFlopGame, query: &NodeQuery) -> Result<NodeStrat
         // unexpected shape (e.g. a non-decision node); leave grading data absent rather than wrong
         Vec::new()
     };
-    game.back_to_root();
     Ok(node)
+}
+
+/// Read the node the game is CURRENTLY positioned on (strategy + F5-correct per-action EV),
+/// for tree-walking validators that manage positioning themselves (e.g. an `apply_history`
+/// DFS). Does NOT move the game to or from root; the caller owns positioning. This is the same
+/// F5-correct read the root and every path read use, exposed so every reachable node can be
+/// verified exhaustively rather than a hand-picked subset.
+pub fn read_positioned_node(game: &mut PostFlopGame) -> Result<NodeStrategy> {
+    read_here_with_epa(game)
 }
 
 /// Walk the game from its current node along a semantic step path.
@@ -293,6 +312,35 @@ fn walk_path(game: &mut PostFlopGame, path: &[Step]) -> Result<()> {
                 game.play(idx);
             }
         }
+    }
+    Ok(())
+}
+
+/// Walk the game from the root along a path of ACTION LABELS (as produced by `render_action`
+/// and shipped in a contract's `actions`), so the labels a client received round-trip with no
+/// separate parser. Action steps only: a chance/terminal node reached mid-path is rejected
+/// (the navigator is flop-only; turn/river is out of scope). The caller positions at root.
+fn walk_labels(game: &mut PostFlopGame, labels: &[String]) -> Result<()> {
+    for label in labels {
+        if game.is_chance_node() {
+            bail!(
+                "path label '{label}' expected a player node but the current node is a chance \
+                 node (turn/river navigation is out of scope)"
+            );
+        }
+        if game.is_terminal_node() {
+            bail!("path label '{label}' cannot be played: the line has already ended");
+        }
+        let actions = game.available_actions();
+        // match against render_action (the exact labels the client received), not Debug
+        let idx = actions
+            .iter()
+            .position(|a| render_action(a) == *label)
+            .ok_or_else(|| {
+                let opts: Vec<String> = actions.iter().map(render_action).collect();
+                anyhow!("action '{label}' not available; options are {opts:?}")
+            })?;
+        game.play(idx);
     }
     Ok(())
 }
@@ -356,6 +404,87 @@ pub fn read_node_weights(game: &mut PostFlopGame, query: &NodeQuery) -> Result<V
     let weights = game.normalized_weights(game.current_player()).to_vec();
     game.back_to_root();
     Ok(weights)
+}
+
+/// How each available action at a node continues the tree, for the navigator's descend
+/// controls: a further `Decision` node (descendable), a `Chance` node (the turn card - the
+/// flop-only boundary), or a `Terminal` node (the hand ends). Serialised to the contract as
+/// "decision" / "chance" / "terminal".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChildKind {
+    Decision,
+    Chance,
+    Terminal,
+}
+
+impl ChildKind {
+    pub fn label(&self) -> &'static str {
+        match self {
+            ChildKind::Decision => "decision",
+            ChildKind::Chance => "chance",
+            ChildKind::Terminal => "terminal",
+        }
+    }
+}
+
+/// `read_node` addressed by a path of action LABELS (the `render_action` strings the client
+/// received in a contract's `actions`) instead of `Step`s, so no separate label parser is
+/// needed and labels cannot drift from the renderer. Per-action EV is filled F5-correctly via
+/// the shared `read_here_with_epa` (see `read_node`). Action steps only (flop-only navigator).
+pub fn read_node_labeled(game: &mut PostFlopGame, labels: &[String]) -> Result<NodeStrategy> {
+    game.back_to_root();
+    walk_labels(game, labels)?;
+    let node = read_here_with_epa(game)?;
+    game.back_to_root();
+    Ok(node)
+}
+
+/// Normalized reach weights for the acting player at the label-addressed node (aligned with
+/// `read_node_labeled(..).hands`). Same F5-correct navigation as `read_node_weights`, by label.
+pub fn read_node_weights_labeled(
+    game: &mut PostFlopGame,
+    labels: &[String],
+) -> Result<Vec<f32>> {
+    game.back_to_root();
+    walk_labels(game, labels)?;
+    if game.is_chance_node() || game.is_terminal_node() {
+        bail!("cannot read weights at a chance/terminal node");
+    }
+    game.cache_normalized_weights();
+    let weights = game.normalized_weights(game.current_player()).to_vec();
+    game.back_to_root();
+    Ok(weights)
+}
+
+/// Classify, for the label-addressed node, what each available action leads to (Decision /
+/// Chance / Terminal), so the navigator offers descend buttons only for decision-leading
+/// actions and renders the rest as leaves ("-> turn", "hand ends"). Index-aligned with the
+/// node's `actions`.
+pub fn child_kinds_labeled(
+    game: &mut PostFlopGame,
+    labels: &[String],
+) -> Result<Vec<ChildKind>> {
+    game.back_to_root();
+    walk_labels(game, labels)?;
+    if game.is_chance_node() || game.is_terminal_node() {
+        bail!("cannot classify children at a chance/terminal node");
+    }
+    let num_actions = game.available_actions().len();
+    let mut kinds = Vec::with_capacity(num_actions);
+    for i in 0..num_actions {
+        game.back_to_root();
+        walk_labels(game, labels)?;
+        game.play(i);
+        kinds.push(if game.is_chance_node() {
+            ChildKind::Chance
+        } else if game.is_terminal_node() {
+            ChildKind::Terminal
+        } else {
+            ChildKind::Decision
+        });
+    }
+    game.back_to_root();
+    Ok(kinds)
 }
 
 /// Read the strategy / EV / equity at whatever node the game is currently positioned on.

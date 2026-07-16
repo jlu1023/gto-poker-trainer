@@ -51,6 +51,7 @@ pub struct Config {
     pub store: StoreConfig,
     pub trainer: TrainerConfig,
     pub review: ReviewConfig,
+    pub navigator: NavigatorConfig,
 }
 
 /// Everything `engine::solve_spot` needs to turn a `Spot` into a solver query and run it.
@@ -213,6 +214,24 @@ pub struct TrainerConfig {
     pub mix_freq_floor: f64,
 }
 
+/// Game-tree navigator display gate + confidence tiers (D55). All values are % of the starting
+/// pot (not fractions), matching the units the navigator reports dominance in.
+///
+/// `display_gate_pct_pot` is the reach-gate: a decision node is descendable only when its own
+/// worst unplayed-action dominance sits at or below it. It is a DISPLAY gate, never the F5 gate
+/// (dot identity stays hard at every displayed node).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NavigatorConfig {
+    /// Worst unplayed-action dominance at or below this % of pot -> the node is descendable.
+    pub display_gate_pct_pot: f32,
+    /// Dominance at or below this -> "high" confidence (near the ~0.1% root solve quality).
+    pub confidence_high_pct_pot: f32,
+    /// Dominance at or below this (and above high) -> "fair"; above it, up to the gate,
+    /// -> "marginal".
+    pub confidence_fair_pct_pot: f32,
+}
+
 impl Config {
     /// Load a configuration from a TOML file. Missing fields fall back to defaults.
     pub fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
@@ -232,6 +251,7 @@ impl Default for Config {
             store: StoreConfig::default(),
             trainer: TrainerConfig::default(),
             review: ReviewConfig::default(),
+            navigator: NavigatorConfig::default(),
         }
     }
 }
@@ -242,6 +262,16 @@ impl Default for TrainerConfig {
             correct_eps_pct_pot: 0.0005,
             minor_leak_max_pct_pot: 0.02,
             mix_freq_floor: 0.10,
+        }
+    }
+}
+
+impl Default for NavigatorConfig {
+    fn default() -> Self {
+        Self {
+            display_gate_pct_pot: 5.0,
+            confidence_high_pct_pot: 0.5,
+            confidence_fair_pct_pot: 2.0,
         }
     }
 }

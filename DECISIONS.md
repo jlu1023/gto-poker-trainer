@@ -433,6 +433,104 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   app's baked default root), so the desktop launch resolves with GTO_LAB_ROOT unset; no code
   path changed for that, noted only because it surfaced with this re-solve.
 
+## Game-tree navigator (2026-07-15)
+
+- **D55. The explore-mode navigator walks a cached solve down the action tree, gated for DISPLAY
+  at 5% of pot of local dominance, with every displayed node carrying its own dominance as a
+  visible confidence signal. The 5% is a deliberate coverage-for-marked-error trade, NOT a
+  natural cutoff.** Scope: `/api/node` reads a non-root node of an ALREADY-CACHED spot (409 if
+  absent - the navigator never solves), and the viz explore mode renders it with a breadcrumb,
+  a per-action rail and a confidence indicator. A `NodeContract` is a superset of
+  `SpotContract`, so the grid, legend, detail and table render a node unchanged; `hero` is the
+  node's actor, so "whose turn" derives with no new field.
+
+  **The finding that forces the design: solve quality is GLOBAL, not local.** `check_invariants`
+  converges the ROOT to <= 0.05% of pot (D54), but Discounted CFR only trains a subtree in
+  proportion to how often it is reached. A low-reach node is therefore barely trained even in a
+  fully converged solve: its stored strategy can leave a large unplayed-action dominance
+  (`best_overall_EV - best_PLAYED_EV`), and that gap does NOT shrink with tighter global
+  convergence. Measured on the stored benchmark, dominance ranges from ~0.1% of pot at the root
+  to ~980% of pot deep in low-reach lines - on trees whose root exploitability is all <= 0.05%.
+  This forces the two-gate split: `ev_dot_consistency` (the dot identity
+  `ev[h] == sum_a strategy . ev_per_action`) is offset-invariant and convergence-INDEPENDENT, so
+  it stays a HARD F5 gate at every displayed node; dominance is a LOCAL SOLVE-QUALITY signal and
+  is used only as the display gate and the confidence basis, never as a hard F5 gate off-root.
+  The root keeps dominance hard-gated in `check_invariants`. Both quantities are computed in one
+  place (`ev_quantities`) so the hard check and the display signal cannot drift apart.
+
+  **Two premises were tested and REFUTED, which is why 5% is a choice and not a discovery.**
+  (1) The clean-gap premise: there is no natural seam. Dominance is a continuous gradient from
+  ~0.1% to ~980% of pot, and the only natural cluster is at <= 0.1%. Any threshold above that
+  cluster is a choice about how much local error to display. (2) The "c-bet and check-raise
+  nodes are always trustworthy" assumption: it does not hold. On the dry board `Ks7h2c` the
+  check-raise node `[Check, Bet(75)]` sits at 4.7% of pot, and on the broadway board `AcKhQd`
+  the IP-facing-bet node sits at 167% of pot - both shallow, neither trustworthy by depth alone.
+
+  **The trade.** 1% is the purest honesty but gates off the bet / raise / check-raise exploration
+  on dry, monotone and broadway boards - exactly the nodes the feature exists to show. 5% admits
+  them at the cost of displaying up to ~5% of pot of local error. That cost is acceptable ONLY
+  because the UI marks per-node confidence. Measured admissions at the root layer (chips on a
+  100-chip pot, so chips == % of pot here): wet `Jc9h8c` 3/3 admitted (0.005 / 0.10 / 1.67);
+  dry `Ks7h2c` 3/3 admitted (0.01 / 2.00 / 4.29) - the shallow tail a 1% gate would have cut;
+  monotone `Kh9h4h` excludes Bet(33) at 6.84%; broadway `AcKhQd` excludes both Bet(33) at 6.49%
+  and Bet(75) at 167.82%. Honest narrowing of the rationale (dry-board coverage; monotone /
+  broadway stay thin, BY DESIGN): 5%-over-1% recovers the bet-response / check-raise tail on the
+  DRY board, where that tail lands at 2.0-4.7% of pot. On monotone and broadway the nearest
+  useful nodes sit at 6.5-6.8% of pot, above the 5% bar, so they stay excluded - and that is
+  correct, not a miss: on those textures even the shallow nodes genuinely are not locally
+  trustworthy. The gate is deliberately NOT pushed to ~7% to admit them, because that would be
+  admitting materially-worse-error nodes. So the trade is real but narrower than "admits the
+  shallow tail on those boards" would imply.
+
+  **The indicator is load-bearing, not decoration.** Every displayed node ships its own
+  dominance as % of pot, and the UI renders it as four co-varying signals (tier colour, tier
+  word, meter fill, and the literal value) so a ~0.01% node and a ~4.7% node cannot look equally
+  authoritative. Tiers: high <= 0.5%, fair <= 2%, marginal <= gate. The gate and the tiers live
+  in `[navigator]` config and SHIP IN THE CONTRACT (`GateContract`), so the client never
+  duplicates a threshold that would drift. Where the navigator will not descend it self-explains
+  in plain terms ("beyond here the solve is not locally trained enough to trust: low-reach
+  subtree", plus the node's own cost and the gate), always visible - never a silent greyed
+  button. **If the indicator cannot be made to work, the honest setting is
+  `display_gate_pct_pot = 1.0`**: 5% with an absent or misleading indicator is showing misleading
+  nodes as gospel, which is the failure the D54 frequency correction already had to undo once.
+
+  **Acceptance** (`verify_navigator.py`), split across two runs by a machine constraint recorded
+  below. Full four-section pass against the packaged SIDECAR binary plus the byte-identical
+  embedded viz bundle (`exe_embeds_dist` proves the app exe embeds those exact viz/dist hashes):
+  reads reconcile CELL-WISE to the `node_grid` oracle (all 143 root classes and 99 IP-c-bet
+  classes, worst disagreement 0.0000% points, tolerance 1%); descent is real (OOP -> IP, strategy
+  differs); the IP c-bet frequency pins (AKo Bet(33) 99.72% navigator vs 99.72% oracle); the F5
+  battery holds on displayed hands (dot identity worst 0.0000 chips); the reported confidence
+  EQUALS dominance recomputed independently from raw per-hand EVs (0.0138% / 0.0062%); the 931%
+  node `[Check, Bet(75), Raise(225)] -> Raise(675)` (`[0,2,2,2]`) is EXCLUDED at 931.5%; the
+  per-texture admissions match the table above; and the indicator separates the root (high
+  confidence, 0.01% of pot) from the marginal node (marginal confidence, 4.74% of pot) on 5
+  independent signals, with the boundary self-explaining. Then, against the REAL operator-launched
+  packaged window (a new `--attach` mode - see the SAC note), the pre-flight, sidecar-freshness,
+  reach-gate-in-contract, real-descent and per-texture-exclusion checks all pass, and the shipped
+  confidence number re-derives EXACTLY from the real window's raw per-hand EVs at the root, the IP
+  c-bet and the marginal node (0.0138 / 0.0062 / 4.7386%, dot identity 0.0000 chips).
+
+  **Machine constraint (Windows Smart App Control).** This host enforces SAC
+  (`VerifiedAndReputablePolicyState = 1`), which blocks EXECUTION of freshly-built unsigned
+  binaries by hash until cloud reputation blesses them. Consequence: the app exe cannot be
+  launched programmatically (only by a user double-click, which cannot carry the CDP env var), so
+  the gate gained `--attach` to verify an operator-launched window; and the `node_grid` oracle
+  binary is itself blocked after any rebuild. So two checks could not execute against the real
+  window on this machine: the `node_grid` cross-oracle in section 2 and the CDP DOM read of the
+  webview in section 4. Both are SAC artefacts, not navigator behaviour - both passed in the
+  sidecar+bundle run above, and `--attach` will run fully green once the binaries are code-signed
+  (or on a non-SAC host). SAC was not disabled (it is endpoint security, off-limits).
+
+  **Open item (not addressed here): navigator latency.** Each `/api/node` read takes ~13-18s: the
+  server calls `load_solution` on every request, decompressing and decoding the whole tree fresh
+  (~7s, the dominant fixed cost, nothing cached in `AppState`), then reads each child once more
+  to compute its dominance (~2s per child, growing with path depth). For a click-to-descend
+  navigator that is poor. The fix (cache decoded games in `AppState` keyed by spot key) has real
+  RAM implications against the 8GB solve ceiling, so it is its own measure-first piece of work,
+  deliberately left out of this change and flagged for a separate decision after the feature is
+  used.
+
 ## Phase 4 findings
 
 - **F5 - Per-action EV must be read with `expected_values_detail` AT the player's own node,

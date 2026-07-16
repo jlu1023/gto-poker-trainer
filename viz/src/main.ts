@@ -2,20 +2,14 @@ import "./style.css";
 import type { SolveComplete, SpotContract } from "./types";
 import type { ClassAgg } from "./grid";
 import { renderTable } from "./table";
-import { renderGrid, actionColors, classOf } from "./grid";
+import { renderGrid, actionColors, classOf, humanAction } from "./grid";
 import { initSolvePanel } from "./solve";
 import { initTrainer, parseHand } from "./trainer";
 import { initReview } from "./review";
+import { initNavigator } from "./navigator";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("missing #app");
-
-function humanAction(label: string): string {
-  const m = label.match(/^([A-Za-z]+)\((\d+)\)$/);
-  if (!m) return label;
-  if (m[1] === "AllIn") return "All-in";
-  return `${m[1]} ${m[2]}`;
-}
 
 // The topbar hosts the SINGLE solve control: depth + board (+ hand in train mode) + one
 // action button. The depth select is shared by both modes; the board input and the button
@@ -71,7 +65,8 @@ app.innerHTML = `
   <main class="stage">
     <section class="table-panel" id="tableHost"></section>
     <aside class="data-panel">
-      <div class="panel-head"><span class="ph-title">OOP flop strategy</span><span class="legend" id="legend"></span></div>
+      <div class="panel-head"><span class="ph-title" id="phTitle">OOP flop strategy</span><span class="legend" id="legend"></span></div>
+      <div class="nav" id="navHost" hidden></div>
       <div class="grid-wrap" id="gridHost"></div>
       <div class="detail" id="detail"></div>
     </aside>
@@ -100,11 +95,27 @@ const tableHost = app.querySelector<HTMLElement>("#tableHost")!;
 const gridHost = app.querySelector<HTMLElement>("#gridHost")!;
 const detailHost = app.querySelector<HTMLElement>("#detail")!;
 const legendHost = app.querySelector<HTMLElement>("#legend")!;
+const navHost = app.querySelector<HTMLElement>("#navHost")!;
+const phTitle = app.querySelector<HTMLElement>("#phTitle")!;
+
+// Descending re-renders the stage from the node the navigator walked to. A NodeContract IS a
+// SpotContract, so the grid / table / detail render it unchanged: they cannot tell a node from
+// a root, which is exactly why the confidence indicator has to carry the difference.
+const treeNav = initNavigator({
+  host: navHost,
+  onNode: (node) => renderSpot(node),
+});
 
 // the last spot rendered from a live solve or trainer reveal (REAL solver output from the
 // server, never mocked); re-entering explore restores it. Recall of any other cached board
-// is re-typing it: the solve path is cache-first, so presets load instantly.
-let lastSpot: SpotContract | null = null;
+// is re-typing it: the solve path is cache-first, so presets load instantly. Depth + pot are
+// captured AT SOLVE TIME, not read back off the selects: the operator can re-point those
+// without re-solving, and the navigator must walk the tree that is actually on stage.
+let lastCtx: { spot: SpotContract; depth: number; potType: string } | null = null;
+
+// the navigator walks the tree of the spot on stage, and only in explore mode: a trainer
+// reveal renders through this same path, and pre-commit the trainer must stay uncoupled (D35).
+let currentMode: "explore" | "train" | "review" = "explore";
 
 // the live grid's selection handles + the spot it renders, for the explore hand-highlight
 // (null whenever no grid is on stage; renderGrid's closures are otherwise ephemeral)
@@ -165,6 +176,7 @@ function showStageMessage(title: string, body: string) {
   detailHost.innerHTML = "";
   legendHost.innerHTML = "";
   currentGrid = null;
+  treeNav.close(); // no tree strip without a spot on stage
   handHl.disabled = true;
   setHandHint("");
 }
@@ -219,6 +231,9 @@ function renderSpot(spot: SpotContract, selectClassLabel?: string) {
   const colors = actionColors(spot.actions);
   renderMeta(spot);
   renderLegend(spot, colors);
+  // whose strategy this grid is: the actor changes as the navigator descends, so the panel
+  // head follows the node rather than claiming "OOP" forever
+  phTitle.textContent = `${spot.hero.position} ${spot.street} strategy`;
 
   const drawTable = (heroCards: string[] | null) => {
     tableHost.replaceChildren(renderTable(spot, heroCards));
@@ -241,11 +256,15 @@ function renderSpot(spot: SpotContract, selectClassLabel?: string) {
   }
 }
 
-/** A live solve (fresh or cached) finished: remember it, render it. */
+/** A live solve (fresh or cached) finished: remember it, render it, and (explore only) enter
+ *  the tree at its root so the navigator's confidence signal covers the root too. */
 function onSolved(payload: SolveComplete, selectClassLabel?: string) {
   const spot = payload.spot;
-  lastSpot = spot;
+  lastCtx = { spot, depth: Number(depthSel.value), potType: potSel.value };
   renderSpot(spot, selectClassLabel);
+  if (currentMode === "explore") {
+    void treeNav.open(spot.board, lastCtx.depth, lastCtx.potType);
+  }
 }
 
 // ---- mode toggle (explore / train / review) ----
@@ -272,6 +291,7 @@ function initModeToggle() {
         flopIn.dispatchEvent(new Event("input"));
       }
       current = mode;
+      currentMode = mode;
     }
     document.body.classList.toggle("mode-train", mode === "train");
     document.body.classList.toggle("mode-review", mode === "review");
@@ -285,8 +305,9 @@ function initModeToggle() {
       // pre-commit (D35)
       showStageMessage("Trainer", TRAINER_PROMPT);
     } else if (mode === "explore") {
-      if (lastSpot) {
-        renderSpot(lastSpot);
+      if (lastCtx) {
+        renderSpot(lastCtx.spot);
+        void treeNav.open(lastCtx.spot.board, lastCtx.depth, lastCtx.potType);
       } else {
         showStageMessage(EXPLORE_IDLE_TITLE, EXPLORE_IDLE_BODY);
       }

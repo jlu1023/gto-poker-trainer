@@ -7,6 +7,7 @@
 //! Run from the repo root (it loads `phase1.toml` and reads/writes `matrix/`):
 //!   cargo run --release -p gto-server
 
+mod node;
 mod review;
 mod solve;
 mod state;
@@ -61,6 +62,7 @@ async fn main() -> anyhow::Result<()> {
     let app = Router::new()
         .route("/api/health", get(health))
         .route("/api/solve", post(solve::solve_handler))
+        .route("/api/node", post(node::node_handler))
         .route("/api/setup", get(trainer::setup_handler))
         .route("/api/grade", post(trainer::grade_handler))
         .route("/api/review/ingest", post(review::ingest_handler))

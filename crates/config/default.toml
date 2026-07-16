@@ -70,3 +70,23 @@ ev_sanity_eps_pct_pot = 0.02
 # Hero bet sizes map to a tree size only within this fraction of pot; else skipped.
 hero_size_tolerance_pct_pot = 0.08
 mix_floor = 0.10
+
+[navigator]
+# Game-tree navigator display gate + confidence tiers (D55). These are % of the starting pot
+# (not fractions), matching the units the navigator reports dominance in.
+#
+# The reach-gate: a decision node is descendable only when its own worst unplayed-action
+# dominance is at or below this. Solve quality is GLOBAL (root exploitability <= 0.05% of pot),
+# not local: a low-reach subtree is trained far less than the root, so its local numbers can be
+# wrong even though the solve as a whole converged. 5% is a deliberate coverage-for-marked-error
+# trade over the stricter 1%: 1% is the purest honesty but gates off the bet / raise /
+# check-raise exploration on dry, monotone and broadway boards - exactly the nodes the navigator
+# exists to show. 5% admits them at the cost of displaying up to ~5% pot of local error. That is
+# acceptable ONLY because every displayed node carries its own dominance as a visible confidence
+# signal; it is not a natural cutoff (dominance is a continuous gradient, the only natural
+# cluster being <= 0.1% of pot).
+display_gate_pct_pot = 5.0
+# Confidence tiers for the per-node indicator. At or below high = "high" (near the ~0.1% root
+# solve quality); at or below fair = "fair"; above fair up to the gate = "marginal".
+confidence_high_pct_pot = 0.5
+confidence_fair_pct_pot = 2.0
