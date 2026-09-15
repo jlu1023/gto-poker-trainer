@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 2b gate verification for GTO Lab viz.
-Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.exe verify_viz.py
+Run with: python verify_viz.py   (Python 3.12 with Playwright installed)
 
 Since the SPOT preset dropdown was removed, the solve cluster (depth select + board input +
 Solve) is the single spot entry, so this gate drives it. Preconditions: a built

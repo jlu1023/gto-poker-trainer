@@ -1,7 +1,7 @@
 # PLAN.md - GTO Poker Bot
 
-Phase 0 plan for the HUNL GTO engine. The master plan in the Obsidian vault
-(`GTO Poker Bot.md`) is the authoritative source of truth; this file is the engineering plan that
+Phase 0 plan for the HUNL GTO engine. The master plan, kept in the author's private project
+notes, is the authoritative source of truth; this file is the engineering plan that
 orients toward the full roadmap (HUNL engine, validation harness, visualization, then multiway, then
 trainer) and executes Phase 0.
 

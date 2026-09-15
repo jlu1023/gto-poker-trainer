@@ -1,7 +1,7 @@
 # PLAN-phase5.md - GTO Poker Bot Phase 5 (hand-history leak analysis)
 
 Status: APPROVED with operator additions D44/D45 + gate addition (2026-06-04). Builds on
-Phase 4 (commit cd31e5b). No em dashes. Authoritative master plan: vault `GTO Poker Bot.md`.
+Phase 4 (commit cd31e5b). No em dashes. Authoritative master plan: the author's private project notes.
 
 ## Goal
 

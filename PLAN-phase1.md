@@ -1,7 +1,7 @@
 # PLAN-phase1.md - GTO Poker Bot Phase 1
 
-Status: EXECUTED 2026-06-03. Gate green (see Results). The authoritative master plan is the vault note
-`GTO Poker Bot.md`; durable findings are in the vault `Phase 0 - findings.md`.
+Status: EXECUTED 2026-06-03. Gate green (see Results). The authoritative master plan and the durable
+Phase 0 findings are kept in the author's private project notes; DECISIONS.md is this repo's record.
 
 ## Goal
 Replace the hardcoded preflop stub with a real authored HU range set, stand up the first curated

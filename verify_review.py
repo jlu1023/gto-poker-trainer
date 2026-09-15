@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 5b gate verification: hand-history leak analysis.
-Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.exe verify_review.py
+Run with: python verify_review.py   (Python 3.12 with Playwright installed)
 
 Covers:
   1. Builds + unit tests (parser/classifier/aggregator units incl. the D45 negative test and

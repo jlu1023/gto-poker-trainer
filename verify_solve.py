@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 3b gate verification: solve-on-demand end to end.
-Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.exe verify_solve.py
+Run with: python verify_solve.py   (Python 3.12 with Playwright installed)
 
 Covers:
   1. cargo check + npm run build clean.

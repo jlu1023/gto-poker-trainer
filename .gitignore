@@ -27,6 +27,12 @@ __pycache__/
 # smoke / engine JSON output
 /out
 
+# viz export output: regenerable from the matrix via
+# `cargo run --release -p gto-store --example export_viz`, so it is build output, not
+# source. Tracked until 2026-09-15, when the exported set went stale (the frontend has
+# read solved spots from the server's /api since Phase 3, not from these files).
+/viz/public/data/
+
 # solved-spot cache: machine-local and multi-GB; wholesale-ignored since
 # 2026-06-07 (operator decision at the first-push gate). Previously the
 # manifest.json index was tracked while the .bin trees were ignored; a
@@ -37,6 +43,11 @@ __pycache__/
 # Phase 5 graded-decision store (personal data; covered by /matrix/ above,
 # kept for documentation)
 /matrix/history/
+
+# per-session agent conventions: kept locally, untracked from 2026-09-15 (public-release
+# prep). It is internal working instruction, not project documentation, and README.md now
+# carries the parts a reader needs. Earlier revisions remain in history.
+/CLAUDE.md
 
 # standard caches / noise (added 2026-06-07)
 .venv/

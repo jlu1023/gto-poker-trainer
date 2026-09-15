@@ -1,7 +1,7 @@
 # PLAN-phase4.md - GTO Poker Bot Phase 4 (manual trainer)
 
 Status: PLAN (awaiting approval). Builds on Phase 3 (commit a223bcc).
-No em dashes. Authoritative master plan: vault `GTO Poker Bot.md`.
+No em dashes. Authoritative master plan: the author's private project notes.
 
 ## Goal
 

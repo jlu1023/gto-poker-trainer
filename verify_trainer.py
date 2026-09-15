@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Phase 4b gate verification: the manual GTO trainer.
-Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.exe verify_trainer.py
+Run with: python verify_trainer.py   (Python 3.12 with Playwright installed)
 
 Covers:
   1. cargo check + grading unit tests + npm build clean.

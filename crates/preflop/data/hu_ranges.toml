@@ -1,5 +1,5 @@
 # Authored heads-up preflop ranges (Phase 1; BB defend ranges re-authored after the SRP
-# range audit - see the vault note "SRP range audit - advisory flag attribution").
+# range audit - "SRP range audit: advisory flag attribution", in the author's notes).
 #
 # These are OUR data, authored from established HU GTO theory, not lifted from any licensed
 # chart pack. Tokens use the postflop-solver notation; entries may carry fractional weights

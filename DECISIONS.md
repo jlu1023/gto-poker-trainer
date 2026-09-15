@@ -1,6 +1,6 @@
 # DECISIONS.md - GTO Poker Bot
 
-Phase 0 decisions and findings. Numbered for reference from the vault and future phases.
+Phase 0 decisions and findings. Numbered so later phases and notes can cite them by number.
 
 ## Decisions
 
@@ -429,9 +429,9 @@ Phase 0 decisions and findings. Numbered for reference from the vault and future
   verify_desktop.py (the packaged app resolves the matrix and paints a cached board). The grade
   unit tests pin their bands to the old 0.005 eps explicitly so they keep exercising the band
   logic at a known epsilon, decoupled from the now-tight production default. Context: the repo
-  had been moved to a sibling folder and back to `C:\Users\james\Projects\gto-poker-bot` (the
-  app's baked default root), so the desktop launch resolves with GTO_LAB_ROOT unset; no code
-  path changed for that, noted only because it surfaced with this re-solve.
+  had been moved to a sibling folder and back to its canonical location (which was the app's
+  baked default root at the time), so the desktop launch resolves with GTO_LAB_ROOT unset; no
+  code path changed for that, noted only because it surfaced with this re-solve.
 
 ## Game-tree navigator (2026-07-15)
 

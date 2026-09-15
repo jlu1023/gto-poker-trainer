@@ -1,7 +1,7 @@
 # PLAN-phase3.md - GTO Poker Bot Phase 3 (solve-on-demand)
 
 Status: PLAN (awaiting approval). Builds on Phase 2 (commit ee73a11).
-No em dashes. Authoritative master plan: vault `GTO Poker Bot.md`.
+No em dashes. Authoritative master plan: the author's private project notes.
 
 ## Goal
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Desktop packaging gate: the Tauri app owns the server lifecycle, end to end.
-Run with: C:\\Users\\james\\AppData\\Local\\Programs\\Python\\Python312\\python.exe verify_desktop.py
+Run with: python verify_desktop.py   (Python 3.12 with Playwright installed)
 
 Asserts, in order (mirroring the P2 acceptance demos, scripted so they stay true):
   1. Pre-flight: no LISTENER on 7474 (TIME_WAIT remnants are kernel-owned and tolerated;

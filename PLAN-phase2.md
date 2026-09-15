@@ -1,6 +1,6 @@
 # PLAN-phase2.md - GTO Poker Bot Phase 2 (local visualization)
 
-Status: PLAN (awaiting approval). Authoritative master plan: vault `GTO Poker Bot.md`. Builds on the
+Status: PLAN (awaiting approval). Authoritative master plan: the author's private project notes. Builds on the
 Phase 1 matrix (8 stored spots). No em dashes. Hard constraint: render everything ORIGINAL (CSS/SVG),
 no scraped/branded/copyrighted poker assets, draw card faces ourselves.
 

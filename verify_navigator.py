@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""
 Game-tree navigator gate (D55): the reach-gate and its confidence indicator, on the PACKAGED app.
-Run with: C:\Users\james\AppData\Local\Programs\Python\Python312\python.exe verify_navigator.py
+Run with: python verify_navigator.py   (Python 3.12 with Playwright installed)
 
 The navigator shows nodes carrying up to 5% of pot of LOCAL error. That is only defensible
 because each node states its own confidence, so this gate proves BOTH halves of the bargain:

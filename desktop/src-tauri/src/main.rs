@@ -8,13 +8,13 @@
 //!      notes "external server") - operator-friendly when a dev server is running.
 //!      Port bound but NOT healthy -> FAIL LOUDLY (dialog) and exit; never silently
 //!      spawn a second server against a squatted port.
-//!   2. Resolve the repo root: env GTO_LAB_ROOT, else the baked default below (this is
-//!      a PERSONAL, undistributed build; the baked absolute path is the honest default
-//!      and the env var is the override).
+//!   2. Resolve the repo root: env GTO_LAB_ROOT, else walk up from this exe (and from
+//!      the cwd) looking for the phase1.toml marker. No absolute path is baked in, so
+//!      a clone builds and runs wherever it sits; the env var stays the explicit override.
 //!   3. MATRIX GUARD (fail loudly, never cold-start): the resolved root must contain
 //!      phase1.toml and matrix/manifest.json. Missing -> dialog naming the resolved
-//!      path and exit. A stale baked path must NEVER degrade into silently re-solving
-//!      the ~3.4GB benchmark from an empty cache.
+//!      path and exit. An unresolved or matrix-less root must NEVER degrade into
+//!      silently re-solving the ~3.4GB benchmark from an empty cache.
 //!   4. Spawn the provisioned sidecar (gto-server.exe beside this exe; see
 //!      desktop/provision-sidecar.ps1) with current_dir = repo root, so phase1.toml
 //!      and the matrix resolve EXACTLY as the standalone server does - one cache,
@@ -40,9 +40,10 @@ use std::time::{Duration, Instant};
 
 use tauri::{Manager, RunEvent};
 
-/// Personal-build default; override with GTO_LAB_ROOT. Distribution is out of scope,
-/// so baking this machine's repo path is the honest resolution (plan, packaging phase).
-const BAKED_DEFAULT_ROOT: &str = r"C:\Users\james\Projects\gto-poker-bot";
+/// The repo-root marker. `phase1.toml` deliberately, NOT matrix/manifest.json: a checkout
+/// with no matrix must still resolve to its real root so the matrix guard below can name
+/// that root in its dialog instead of an unrelated cwd.
+const ROOT_MARKER: &str = "phase1.toml";
 
 const HEALTH_ADDR: &str = "127.0.0.1:7474";
 
@@ -99,10 +100,27 @@ fn dev_server_up() -> bool {
     .is_ok()
 }
 
+/// Resolve the repo root WITHOUT baking in a machine-specific path: the explicit env
+/// override first, then the nearest ancestor of this exe (then of the cwd) that carries
+/// the marker. The packaged exe sits at desktop/src-tauri/target/release, so the walk
+/// finds the root four levels up; a `cargo run` from the repo root finds it via the cwd.
+/// Falling back to the cwd (never a guess) keeps the matrix guard's dialog truthful.
 fn repo_root() -> PathBuf {
-    std::env::var("GTO_LAB_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(BAKED_DEFAULT_ROOT))
+    if let Ok(v) = std::env::var("GTO_LAB_ROOT") {
+        return PathBuf::from(v);
+    }
+    let starts = [
+        std::env::current_exe().ok().and_then(|p| p.parent().map(PathBuf::from)),
+        std::env::current_dir().ok(),
+    ];
+    for start in starts.into_iter().flatten() {
+        for dir in start.ancestors() {
+            if dir.join(ROOT_MARKER).is_file() {
+                return dir.to_path_buf();
+            }
+        }
+    }
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
 /// Blocking native error dialog + process exit (used before/around the event loop).
@@ -176,10 +194,10 @@ fn main() {
                 "GTO Lab: matrix not found",
                 &format!(
                     "Expected phase1.toml and matrix\\manifest.json under:\r\n  {}\r\n\r\n\
-                     Set GTO_LAB_ROOT to the gto-poker-bot repo root (or fix the baked \
-                     default in desktop/src-tauri/src/main.rs). Refusing to start the \
-                     solver against an empty cache: that would silently re-solve the \
-                     ~3.4GB benchmark instead of using the existing matrix.",
+                     Set GTO_LAB_ROOT to the repo root, or build the matrix first \
+                     (cargo run --release -p gto-store --example build_matrix). Refusing \
+                     to start the solver against an empty cache: that would silently \
+                     re-solve the ~3.4GB benchmark instead of using the existing matrix.",
                     root.display()
                 ),
             );
