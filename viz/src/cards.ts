@@ -22,7 +22,7 @@ export function cardSvg(card: string, width = 58): string {
     <rect x="2" y="2" width="96" height="136" rx="11" fill="var(--card-face)"
       stroke="rgba(20,24,28,0.25)" stroke-width="1.5"/>
     <text x="12" y="34" font-size="${rankSize}" font-weight="800"
-      font-family="'JetBrains Mono', monospace" fill="${ink}">${rank}</text>
+      font-family="var(--font-mono)" fill="${ink}">${rank}</text>
     <text x="14" y="60" font-size="22" fill="${ink}">${glyph}</text>
     <text x="50" y="98" font-size="56" text-anchor="middle" fill="${ink}" opacity="0.92">${glyph}</text>
   </svg>`;

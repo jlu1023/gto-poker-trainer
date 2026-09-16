@@ -13,12 +13,11 @@ is worth stating plainly before anything else:
 
 - **It is not real-time assistance during live play.** It is for reviewing spots before and after
   a session, not during one.
-- **It is not connected to any poker site.** There is no scraper, no screen reader, no overlay,
-  no HUD, no site integration of any kind. All solving is local: every API call the interface
-  makes goes to a server it spawns itself on `127.0.0.1:7474`. The only traffic that leaves the
-  machine is for web fonts, namely a stylesheet from `fonts.googleapis.com` and the font files it
-  references from `fonts.gstatic.com`. There is no analytics, no telemetry and no update check.
-  Nothing poker-related leaves the machine, and the interface falls back to system fonts offline.
+- **It is not connected to anything.** There is no scraper, no screen reader, no overlay, no HUD,
+  no site integration of any kind. Every API call the interface makes goes to a server the
+  application spawns itself on `127.0.0.1:7474`, which is loopback. **Nothing leaves the machine
+  at all:** no webfonts (the interface uses system font stacks deliberately), no analytics, no
+  telemetry, no update check, no remote assets. The application works with the network off.
 - **Hand-history analysis is post-hoc only.** You paste in hands you have already played. The
   reviewer reports *aggregate frequency* leaks by node ("you fold too often here across 40
   hands"), and by deliberate design no surface in it can emit a next-move recommendation. GTO is

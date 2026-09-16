@@ -20,8 +20,11 @@
   --card-red: #c5403a;
   --card-back: #233042;
 
-  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* System stacks only: no webfont is fetched, so the app makes zero outbound requests.
+     Keep it that way - adding a hosted font would break that guarantee. */
+  --font-display: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, "Liberation Mono",
+    monospace;
 }
 
 * {
